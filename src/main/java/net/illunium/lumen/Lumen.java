@@ -8,12 +8,14 @@ import net.illunium.lumen.core.Config;
 import net.illunium.lumen.core.HealthState;
 import net.illunium.lumen.core.HelpCommand;
 import net.illunium.lumen.core.StatusCommand;
+import net.illunium.lumen.moderation.ModerationCommand;
 import net.illunium.lumen.notifications.NotificationType;
 import net.illunium.lumen.notifications.Notifications;
 import net.illunium.lumen.roles.SelfRolesCommand;
 import net.illunium.lumen.storage.Database;
 import net.illunium.lumen.storage.SelfRoleRepository;
 import net.illunium.lumen.storage.TicketRepository;
+import net.illunium.lumen.storage.WarningRepository;
 import net.illunium.lumen.tickets.TicketCommand;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -50,6 +52,8 @@ public final class Lumen {
                 new SelfRoleRepository(database), notifications, config));
         router.register(new TicketCommand(
                 new TicketRepository(database), notifications, config));
+        ModerationCommand.all(new WarningRepository(database), notifications)
+                .forEach(router::register);
         Runtime.getRuntime().addShutdownHook(
                 new Thread(() -> shutdown(jda, database, notifications), "lumen-shutdown"));
 

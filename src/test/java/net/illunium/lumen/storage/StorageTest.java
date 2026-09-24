@@ -10,6 +10,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.sql.SQLException;
 import java.sql.Statement;
+import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 import net.illunium.lumen.storage.TicketRepository.Status;
@@ -128,6 +129,40 @@ class StorageTest {
             assertTrue(tickets.byChannel(500L).orElseThrow().closed());
             assertTrue(tickets.openByCreator(99L).isEmpty(),
                     "the stale row must not block the member forever");
+        }
+    }
+
+    @Test
+    void warningsAccumulatePerMemberAndSurviveARestart(@TempDir Path dir) {
+        Path file = dir.resolve("lumen.db");
+        long target = 99L;
+        long moderator = 7L;
+
+        try (Database database = Database.open(file)) {
+            WarningRepository warnings = new WarningRepository(database);
+            assertEquals(0, warnings.count(target));
+            assertEquals(List.of(), warnings.of(target, 10));
+
+            assertEquals(1, warnings.add(target, moderator, "Spam"));
+            assertEquals(2, warnings.add(target, moderator, "Beleidigung"),
+                    "add reports the running total, which is what the moderator is told");
+            assertEquals(1, warnings.add(target + 1, moderator, "Spam"),
+                    "warnings are counted per member, not globally");
+        }
+
+        try (Database database = Database.open(file)) {
+            WarningRepository warnings = new WarningRepository(database);
+            assertEquals(2, warnings.count(target), "warnings survive a restart");
+
+            List<WarningRepository.Warning> all = warnings.of(target, 10);
+            assertEquals(List.of("Beleidigung", "Spam"),
+                    all.stream().map(WarningRepository.Warning::reason).toList(),
+                    "newest first");
+            assertEquals(moderator, all.getFirst().moderatorId());
+            assertTrue(all.getFirst().createdAt().isBefore(Instant.now().plusSeconds(1)));
+
+            assertEquals(1, warnings.of(target, 1).size(), "the display cap is honoured");
+            assertEquals(2, warnings.count(target), "but the cap never changes the true total");
         }
     }
 

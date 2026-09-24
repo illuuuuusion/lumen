@@ -37,8 +37,8 @@ web            static UI bundle, Discord OAuth login, config API
 
 Kingdoms stays the source of truth for gameplay state; Lumen only mirrors it.
 
-Only `core`, `storage`, `notifications`, `roles` and `tickets` exist so far — the
-remaining packages are added in their phases.
+Only `core`, `storage`, `notifications`, `roles`, `tickets` and `moderation` exist
+so far — the remaining packages are added in their phases.
 
 ## Local setup
 
@@ -136,7 +136,7 @@ public for members but administrative in parts lists those paths in
 Buttons and select menus are routed by the `<command>:` prefix of their
 component ID to `handleComponent`, through the same error handler.
 
-`/help`, `/status`, `/roles` and `/ticket` exist so far.
+`/help`, `/status`, `/roles`, `/ticket` and the moderation commands exist so far.
 
 ## Self roles
 
@@ -208,6 +208,44 @@ ticket; an in-memory guard catches double-clicks on the panel.
 
 `channels.tickets-category` and `roles.staff` must be filled in, and the bot needs
 `MANAGE_CHANNEL` plus `MANAGE_PERMISSIONS` in that category.
+
+## Moderation
+
+Warn, timeout, kick and ban, plus the warning history. All five are `staffOnly()`,
+so the router turns members away before a handler runs.
+
+| Command | Effect |
+|---|---|
+| `/warn <user> <grund>` | records a warning and reports the running total |
+| `/warnings <user>` | the newest 10 warnings and the true total |
+| `/timeout <user> <minuten> [grund]` | Discord timeout, 1 to 40320 minutes (28 days) |
+| `/kick <user> [grund]` | removes the member |
+| `/ban <user> [grund]` | bans, also someone who already left |
+
+One class serves all five, one instance per `Action`, because they differ only in
+their options and their single effect — the guards, the audit entry and the error
+handling are written once.
+
+Each action is checked against the Discord role hierarchy twice: the target must
+stand below the moderator, and below the bot whenever the bot has to act on
+Discord. `/warn` only writes a row, so the bot's own role position does not gate
+it. A missing bot permission is named to the moderator rather than attempted and
+failed. The order of the guards is deliberate: someone aiming above themselves is
+told so instead of being told the bot lacks a permission.
+
+The target member is read from the interaction payload, not the member cache, so
+this works without the privileged `GUILD_MEMBERS` intent. `/ban` is the one action
+that still works on a user who is no longer on the server.
+
+Replies are ephemeral and `#bot-log` carries the audit trail, so moderation does
+not leak into whatever channel the command was typed in. Every successful action
+leaves through one method, so nothing can succeed without being logged.
+
+Option limits are declared on the options themselves (`setRequiredRange`,
+`setMaxLength`), so Discord rejects an over-long reason or an impossible duration
+before it reaches the bot — no parsing and no truncation code.
+
+Warnings are append-only in the `warnings` table and survive the member leaving.
 
 ## Conventions
 

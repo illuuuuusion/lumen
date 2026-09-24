@@ -1051,15 +1051,15 @@ Kleine, nachvollziehbare Grundmoderation.
 
 ### Aufgaben
 
-- [ ] `/warn`.
-- [ ] `/warnings`.
-- [ ] `/timeout`.
-- [ ] `/kick`.
-- [ ] `/ban`.
-- [ ] Discord Permission Checks.
-- [ ] Bot-Rollenhierarchie prüfen.
-- [ ] jede Aktion in `#bot-log` protokollieren.
-- [ ] Warnings persistent speichern.
+- [x] `/warn`.
+- [x] `/warnings`.
+- [x] `/timeout`.
+- [x] `/kick`.
+- [x] `/ban`.
+- [x] Discord Permission Checks.
+- [x] Bot-Rollenhierarchie prüfen.
+- [x] jede Aktion in `#bot-log` protokollieren.
+- [x] Warnings persistent speichern.
 
 ### Akzeptanzkriterien
 
@@ -1067,6 +1067,58 @@ Kleine, nachvollziehbare Grundmoderation.
 - Bot kann keine User moderieren, die aufgrund Discord-Hierarchie nicht moderierbar sind.
 - jede erfolgreiche Aktion ist auditierbar.
 - Fehler werden verständlich an den Moderator zurückgegeben.
+
+### Umsetzungsnotizen
+
+- `net.illunium.lumen.moderation.ModerationCommand`, Verwarnungen in der Tabelle
+  `warnings` (`net.illunium.lumen.storage.WarningRepository`).
+
+| Befehl | Recht | Wirkung |
+|---|---|---|
+| `/warn <user> <grund>` | Staff | speichert eine Verwarnung, nennt den laufenden Stand |
+| `/warnings <user>` | Staff | die neuesten 10 Verwarnungen und die echte Gesamtzahl |
+| `/timeout <user> <minuten> [grund]` | Staff | Discord-Timeout, 1 bis 40320 Minuten (28 Tage) |
+| `/kick <user> [grund]` | Staff | entfernt das Mitglied |
+| `/ban <user> [grund]` | Staff | bannt, auch jemanden der den Server schon verlassen hat |
+
+- Eine Klasse bedient alle fünf Befehle, eine Instanz je `Action`. Sie
+  unterscheiden sich nur in ihren Optionen und ihrer einen Wirkung; Guards,
+  Audit-Eintrag und Fehlerbehandlung stehen genau einmal da.
+- Alle fünf sind `staffOnly()`. Die Rechteprüfung passiert im Router, bevor ein
+  Handler läuft — normale Mitglieder erreichen den Code nie.
+- Die Rollenhierarchie wird **zweimal** geprüft: das Ziel muss unter dem
+  Moderator stehen und unter dem Bot, sofern der Bot auf Discord handeln muss.
+  `/warn` schreibt nur eine Zeile, also spielt die Rollenposition des Bots dort
+  keine Rolle — sonst könnte eine tief stehende Botrolle eine legitime Verwarnung
+  blockieren.
+- **Reihenfolge der Guards** ist Absicht: erst Selbst-/Bot-Ziel, dann
+  Mitgliedschaft, dann der Stand des Moderators, erst danach was der Bot kann.
+  So hört jemand, der über sich zielt, genau das — und nicht, dem Bot fehle ein
+  Recht.
+- Ein fehlendes Bot-Recht wird benannt (`Permission.getName()`), statt die Aktion
+  zu versuchen und an Discord scheitern zu lassen.
+- Das Ziel-Member kommt aus dem Interaction-Payload
+  (`OptionMapping::getAsMember`), nicht aus dem Member-Cache. Damit funktioniert
+  das ohne den privilegierten `GUILD_MEMBERS`-Intent. `null` heißt schlicht
+  „nicht auf dem Server“.
+- `/ban` ist die einzige Aktion, die jemanden erreicht, der den Server bereits
+  verlassen hat. Alle anderen verlangen Anwesenheit.
+- **Abweichung:** Antworten sind ephemeral, der Audit-Trail ist `#bot-log`. Eine
+  öffentliche Bestätigung würde Moderation in genau den Channel tragen, in dem
+  der Befehl zufällig getippt wurde. Jede erfolgreiche Aktion verlässt den Code
+  durch genau eine Methode, es kann also nichts gelingen, ohne protokolliert zu
+  werden.
+- Optionsgrenzen stehen an den Optionen selbst (`setRequiredRange`,
+  `setMaxLength`). Discord weist eine zu lange Begründung oder eine unmögliche
+  Dauer ab, bevor sie den Bot erreicht — kein Parser, kein Kürzungscode, und die
+  512-Zeichen-Grenze des Audit-Logs kann nicht überschritten werden.
+- Verwarnungen sind append-only und überleben den Austritt des Mitglieds; ein
+  zurückkehrendes Mitglied behält seine Historie.
+- Kein Eskalationsautomatismus (`n` Verwarnungen → Timeout). Der Stand wird
+  gemeldet, das Team entscheidet; eine Schwelle lohnt sich erst, wenn jemand eine
+  nennt.
+- Keine neue Migration nötig: `warnings` ist seit Migration 1 vorhanden.
+  Migrationen sind append-only.
 
 ---
 
