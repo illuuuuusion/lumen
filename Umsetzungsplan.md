@@ -564,16 +564,16 @@ Vorhandenes Repo verstehen und eine verlässliche Ausgangsbasis schaffen.
 
 ### Aufgaben
 
-- [ ] Projektstruktur analysieren.
-- [ ] Buildsystem prüfen.
-- [ ] Java-Version prüfen.
-- [ ] JDA-Abhängigkeit prüfen oder hinzufügen.
-- [ ] Gradle Wrapper prüfen/anlegen.
-- [ ] Test-Setup prüfen/anlegen.
-- [ ] `.gitignore` für Secrets, DB-Dateien, IDE-Dateien und Builds prüfen.
-- [ ] vorhandene CI prüfen.
-- [ ] lokale Startanleitung dokumentieren.
-- [ ] sicherstellen, dass ein sauberer Checkout gebaut werden kann.
+- [x] Projektstruktur analysieren.
+- [x] Buildsystem prüfen.
+- [x] Java-Version prüfen.
+- [x] JDA-Abhängigkeit prüfen oder hinzufügen.
+- [x] Gradle Wrapper prüfen/anlegen.
+- [x] Test-Setup prüfen/anlegen.
+- [x] `.gitignore` für Secrets, DB-Dateien, IDE-Dateien und Builds prüfen.
+- [x] vorhandene CI prüfen.
+- [x] lokale Startanleitung dokumentieren.
+- [x] sicherstellen, dass ein sauberer Checkout gebaut werden kann.
 
 ### Akzeptanzkriterien
 
