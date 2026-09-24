@@ -12,6 +12,7 @@ repositories {
 dependencies {
     implementation("net.dv8tion:JDA:5.6.1")
     implementation("ch.qos.logback:logback-classic:1.5.18")
+    implementation("org.yaml:snakeyaml:2.4")
 
     testImplementation("org.junit.jupiter:junit-jupiter:5.12.2")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")

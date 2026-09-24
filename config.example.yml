@@ -1,0 +1,19 @@
+# Non-sensitive Discord IDs. Copy to config.yml and fill in the real values.
+# Secrets belong in the environment, never here.
+guild:
+  id: 0
+
+channels:
+  announcements: 0
+  status: 0
+  bot-log: 0
+  tickets-category: 0
+  matches: 0
+
+roles:
+  verified: 0
+  staff: 0
+  north: 0
+  east: 0
+  south: 0
+  west: 0

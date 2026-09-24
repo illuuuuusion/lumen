@@ -592,19 +592,19 @@ Stabile technische Grundlage, auf der alle weiteren Module aufbauen.
 
 ### Aufgaben
 
-- [ ] Application Entry Point.
-- [ ] Discord/JDA Client initialisieren.
-- [ ] kontrollierten Shutdown implementieren.
-- [ ] Config Loader implementieren.
-- [ ] Environment-Secret Loader implementieren.
-- [ ] zentrale ID-/Config-Klassen statt Magic Numbers.
-- [ ] Slash-Command-Registrierung aufbauen.
-- [ ] Command Routing / Handler-Struktur definieren.
-- [ ] Permission Layer implementieren.
-- [ ] zentralen Error Handler implementieren.
-- [ ] strukturierte Logs einrichten.
-- [ ] Bot Health State bereitstellen.
-- [ ] `/help` und `/status` als Smoke-Test-Commands implementieren.
+- [x] Application Entry Point.
+- [x] Discord/JDA Client initialisieren.
+- [x] kontrollierten Shutdown implementieren.
+- [x] Config Loader implementieren.
+- [x] Environment-Secret Loader implementieren.
+- [x] zentrale ID-/Config-Klassen statt Magic Numbers.
+- [x] Slash-Command-Registrierung aufbauen.
+- [x] Command Routing / Handler-Struktur definieren.
+- [x] Permission Layer implementieren.
+- [x] zentralen Error Handler implementieren.
+- [x] strukturierte Logs einrichten.
+- [x] Bot Health State bereitstellen.
+- [x] `/help` und `/status` als Smoke-Test-Commands implementieren.
 
 ### Akzeptanzkriterien
 

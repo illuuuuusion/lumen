@@ -1,32 +1,52 @@
 package net.illunium.lumen;
 
+import java.time.Duration;
+import net.dv8tion.jda.api.JDA;
 import net.dv8tion.jda.api.JDABuilder;
+import net.illunium.lumen.core.CommandRouter;
+import net.illunium.lumen.core.Config;
+import net.illunium.lumen.core.HealthState;
+import net.illunium.lumen.core.HelpCommand;
+import net.illunium.lumen.core.StatusCommand;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * Application entry point.
- *
- * <p>Baseline only: connects to Discord with the token from the environment.
- * Config loading, shutdown handling and command registration follow in phase 1.
+ * Application entry point: loads the configuration, starts the JDA client and
+ * shuts it down cleanly.
  */
 public final class Lumen {
 
     private static final Logger log = LoggerFactory.getLogger(Lumen.class);
 
     public static void main(String[] args) throws InterruptedException {
-        String token = requireEnv("DISCORD_TOKEN");
+        Config config = Config.load();
+        String token = Config.requireEnv("DISCORD_TOKEN");
 
-        JDABuilder.createDefault(token).build().awaitReady();
+        HealthState health = new HealthState();
+        CommandRouter router = new CommandRouter(config, health);
+        router.register(new HelpCommand(router));
+        router.register(new StatusCommand(health));
+
+        JDA jda = JDABuilder.createDefault(token).addEventListeners(router).build();
+        Runtime.getRuntime().addShutdownHook(new Thread(() -> shutdown(jda), "lumen-shutdown"));
+
+        jda.awaitReady();
         log.info("Lumen connected to Discord");
     }
 
-    static String requireEnv(String name) {
-        String value = System.getenv(name);
-        if (value == null || value.isBlank()) {
-            throw new IllegalStateException("Missing required environment variable: " + name);
+    private static void shutdown(JDA jda) {
+        log.info("Shutting down");
+        jda.shutdown();
+        try {
+            if (!jda.awaitShutdown(Duration.ofSeconds(10))) {
+                log.warn("Graceful shutdown timed out, forcing");
+                jda.shutdownNow();
+            }
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            jda.shutdownNow();
         }
-        return value;
     }
 
     private Lumen() {

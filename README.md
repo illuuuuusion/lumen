@@ -43,8 +43,9 @@ Only `core` exists so far — the remaining packages are added in their phases.
 Requires a JDK 25 on `PATH` (or let the Gradle toolchain provision one).
 
 ```bash
-cp .env.example .env     # fill in DISCORD_TOKEN
-./gradlew build          # compile + tests
+cp .env.example .env           # fill in DISCORD_TOKEN
+cp config.example.yml config.yml   # fill in guild, channel and role IDs
+./gradlew build                # compile + tests
 ```
 
 Run the bot with the token exported:
@@ -73,8 +74,16 @@ Secrets come from environment variables only and are never committed. See
 | `LUMEN_CONFIG_PATH` | path to the non-sensitive config file |
 | `LUMEN_DATABASE_PATH` | path to the SQLite database file |
 
-Non-sensitive Discord IDs (guild, channels, roles) belong in the config file,
-never hardcoded in commands or event handlers.
+Non-sensitive Discord IDs (guild, channels, roles) live in `config.yml`
+(see [config.example.yml](config.example.yml)), never hardcoded in commands or
+event handlers. Look them up via `config.id("channels.status")`.
+
+## Commands
+
+Commands implement `Command` and are registered on the `CommandRouter`, which
+publishes them to the configured guild on startup and handles permission checks
+and errors centrally. A command with `staffOnly()` requires the `roles.staff`
+role. `/help` and `/status` exist so far.
 
 ## Conventions
 
