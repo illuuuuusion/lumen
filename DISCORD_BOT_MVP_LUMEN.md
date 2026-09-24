@@ -18,7 +18,7 @@ Der MVP ist erfolgreich, wenn Illunium damit:
 
 - Discord-Rollen und Onboarding sauber verwalten kann
 - einfache Tickets ohne externen Ticket-Bot betreiben kann
-- Minecraft-Serverstatus anzeigen kann
+- den Status mehrerer Minecraft-Server anzeigen kann
 - Kingdoms-Matches und wichtige Projektmeldungen automatisch in Discord spiegeln kann
 - Minecraft-/Service-Ausfälle in Discord melden kann
 - Minecraft-Accounts mit Discord-Accounts verknüpfen kann
@@ -143,7 +143,28 @@ web:
   bind: 127.0.0.1
   port: 8080
   base-url: "https://lumen.example.net"
+
+servers:
+  kingdoms:
+    name: "Kingdoms"
+    address: "kingdoms.example.net"
+    port: 25565
+    monitored: true
+    kingdoms-events: true
+    status-channel: 456
+  forever:
+    name: "Forever-World"
+    address: "forever.example.net"
+    port: 25565
+    monitored: true
+    kingdoms-events: false
 ```
+
+Die Serverliste ist Konfiguration. Ein weiterer Server wird durch einen Eintrag angebunden, nicht durch Code.
+
+Der Schlüssel eines Eintrags ist der Server Key. Er erscheint in Events, in gespeicherten Zuständen und in Discord-Ausgaben.
+
+`kingdoms-events: true` trägt genau ein Server: Das Kingdoms-System existiert nur einmal, und nur dieser Server darf Kingdoms-Events senden.
 
 Keine Discord-IDs hardcoden.
 
@@ -336,18 +357,22 @@ Anzeige pro Server:
 - Ping/Antwortzeit
 - optional aktuelle Projektphase
 
-MVP-Server:
+Die Server kommen aus der Config, nicht aus dem Code. Beliebig viele Einträge sind möglich, im MVP:
 
 ```text
 Kingdoms
 Forever-World (sobald vorhanden)
 ```
 
-Lobby/Testserver müssen nicht öffentlich angezeigt werden.
+Lobby/Testserver müssen nicht öffentlich angezeigt werden; sie bleiben auf `monitored: false` oder fehlen ganz.
+
+`/server status` ohne Angabe zeigt alle Server, mit Angabe genau einen. Die Auswahl kommt aus der Config.
+
+Alle Server werden parallel abgefragt. Ein langsamer oder toter Server darf die Anzeige der übrigen nicht verzögern.
 
 ### Status Message
 
-Optional eine dauerhaft aktualisierte Embed-Nachricht in `#status`.
+Optional eine dauerhaft aktualisierte Embed-Nachricht je Server. Der Channel kommt aus `status-channel` des Servers, sonst aus `channels.status`.
 
 Updateintervall:
 
@@ -468,6 +493,10 @@ zusätzlich:
 - Secret aus Environment Variable
 - Rate Limit
 - Payload Validation
+- `server` muss ein konfigurierter Server Key sein, sonst wird das Event abgelehnt
+- Kingdoms-Events nur von dem Server, der `kingdoms-events: true` trägt
+
+Im MVP teilen sich alle eigenen Server ein gemeinsames Secret. Das `server`-Feld ordnet ein Event zu, es authentifiziert den Absender nicht. Sobald ein Server außerhalb des eigenen internen Netzes sendet, wird auf ein Secret pro Server umgestellt.
 
 Später kann die Verbindung durch mTLS oder einen Message Broker ersetzt werden, falls überhaupt nötig.
 
@@ -745,6 +774,7 @@ Nicht pauschal Administrator geben, wenn vermeidbar.
 
 - private Bind-Adresse
 - Shared Secret
+- nur konfigurierte Server Keys werden akzeptiert
 - Input Validation
 - Request Size Limit
 - Rate Limit
@@ -899,7 +929,7 @@ Das Discord-Bot-MVP ist einsatzbereit, wenn:
 - SQLite migrationsfähig initialisiert wird
 - Self Roles funktionieren
 - Tickets erstellt/geschlossen werden können
-- Minecraft-Status abrufbar ist
+- der Status aller konfigurierten Minecraft-Server abrufbar ist
 - Minecraft ↔ Discord Linking funktioniert
 - Web UI ist nur für eingeloggte Staffmitglieder nutzbar
 - Config kann über das Web UI gepflegt werden und wirkt ohne Neustart

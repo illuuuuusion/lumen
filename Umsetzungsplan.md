@@ -87,7 +87,7 @@ Der MVP soll insbesondere ermöglichen:
 - Discord-Rollen und Self Roles zu verwalten,
 - einfache Tickets ohne externen Ticket-Bot zu betreiben,
 - grundlegende Moderationsbefehle bereitzustellen,
-- Minecraft-Serverstatus anzuzeigen,
+- Status mehrerer Minecraft-Server anzuzeigen,
 - Discord- und Minecraft-Accounts zu verknüpfen,
 - Kingdom-Rollen automatisch zu synchronisieren,
 - Kingdoms-Matchzustände und Ergebnisse in Discord zu spiegeln,
@@ -151,6 +151,7 @@ React + TypeScript + Vite (Web UI)
 - Externe Systeme über kleine, klar definierte Interfaces anbinden.
 - Strukturierte Logs über stdout/stderr; optional ergänzend Rolling File Logs.
 - Web UI wird als statisches Bundle im Bot-Artefakt ausgeliefert; ein deploybares Artefakt bleibt bestehen.
+- Mehrere Minecraft-Server sind vorgesehen: Adressen, Anzeige und Monitoring kommen aus der Config, nie aus dem Code.
 - Node ist reine Buildzeit-Abhängigkeit, kein Bestandteil des Produktionsbetriebs.
 
 ### 3.2 Zielmodule
@@ -345,7 +346,32 @@ web:
   bind: 127.0.0.1
   port: 8080
   base-url: "https://lumen.example.net"
+
+servers:
+  kingdoms:
+    name: "Kingdoms"
+    address: "kingdoms.example.net"
+    port: 25565
+    monitored: true
+    kingdoms-events: true
+    status-channel: 456
+  forever:
+    name: "Forever-World"
+    address: "forever.example.net"
+    port: 25565
+    monitored: true
+    kingdoms-events: false
 ```
+
+Die Serverliste ist Konfiguration, kein Code. Ein weiterer Minecraft-Server wird durch einen zusätzlichen Eintrag angebunden, nicht durch eine Codeänderung.
+
+Der Schlüssel eines Eintrags, im Beispiel `kingdoms` und `forever`, ist der **Server Key**. Er erscheint in Events, in `server_status` und in Discord-Ausgaben und darf nachträglich nicht umbenannt werden, ohne die gespeicherten Zustände mitzuziehen.
+
+Bedeutung der Felder:
+
+- `monitored`: Server geht in Statusanzeige und Monitoring ein.
+- `kingdoms-events`: Server darf Kingdoms-Events senden. Genau ein Server trägt hier `true`; das Kingdoms-System existiert nur einmal.
+- `status-channel`: optionaler eigener Channel, sonst gilt `channels.status`.
 
 IDs niemals direkt in Event Handlern oder Commands hardcoden.
 
@@ -433,6 +459,8 @@ Je nach Repository-Stand dürfen Tabellen kombiniert oder leicht anders benannt 
 
 #### `server_status`
 
+Eine Zeile pro konfiguriertem Server. Der Server Key entspricht dem Schlüssel aus der Config.
+
 - Server Key
 - Current State
 - Last Change
@@ -484,7 +512,13 @@ Zusätzlich:
 - JSON-/Payload-Validierung,
 - Rate Limit,
 - unbekannte Eventtypen sauber ablehnen,
-- keine sensitiven Daten ungefiltert loggen.
+- keine sensitiven Daten ungefiltert loggen,
+- das Feld `server` gegen die konfigurierten Server Keys prüfen und unbekannte Absender ablehnen,
+- Kingdoms-Events nur von dem Server annehmen, der in der Config `kingdoms-events: true` trägt.
+
+Im MVP teilen sich alle eigenen Server ein gemeinsames Secret. Das ist vertretbar, solange alle sendenden Server im eigenen internen Netz laufen und derselben Vertrauensgrenze angehören.
+
+Sobald ein Server außerhalb dieser Grenze sendet, wird auf ein Secret pro Server umgestellt, damit ein kompromittierter Server nicht im Namen eines anderen posten kann. Bis dahin gilt: Das `server`-Feld ist eine Zuordnung, keine Authentifizierung.
 
 ### 7.3 Eventtypen MVP
 
@@ -592,6 +626,7 @@ Im MVP enthalten:
 - Login über Discord OAuth2,
 - Statusseite mit Health, Uptime, Gateway-Latenz und Monitoring-Zustand,
 - Config-Editor für Guild-, Channel- und Rollen-IDs mit Auswahllisten aus der Guild,
+- Pflege der Serverliste: Einträge anlegen, bearbeiten und deaktivieren,
 - Anzeige der letzten Audit-Log-Einträge.
 
 Nicht enthalten:
@@ -933,14 +968,15 @@ MCStatus-artige Grundfunktionen für Illunium-Server.
 
 ### Aufgaben
 
-- [ ] Serverdefinitionen konfigurierbar machen.
+- [ ] Serverliste aus der Config lesen, beliebig viele Einträge unterstützen.
 - [ ] Minecraft-Ping implementieren.
 - [ ] Statusdaten normalisieren.
-- [ ] `/server status`.
-- [ ] `/server players`.
+- [ ] `/server status [server]` mit Auswahlliste aus der Config; ohne Angabe alle Server.
+- [ ] `/server players [server]`.
 - [ ] `Kingdoms` als MVP-Server aufnehmen.
 - [ ] `Forever-World` vorbereiten, sobald vorhanden.
-- [ ] optionale persistente Statusnachricht in `#status`.
+- [ ] alle Server parallel abfragen, ein langsamer Server blockiert die übrigen nicht.
+- [ ] optionale persistente Statusnachricht je Server, Channel aus `status-channel` oder `channels.status`.
 - [ ] Updateintervall standardmäßig 60 Sekunden.
 - [ ] Timeouts und Fehler sauber behandeln.
 
@@ -948,6 +984,8 @@ MCStatus-artige Grundfunktionen für Illunium-Server.
 
 - Offline-Server erzeugen keinen Command-Fehler.
 - Online/Offline, Spielerzahl und Latenz werden sinnvoll angezeigt.
+- Ein zusätzlicher Server wird allein über die Config angebunden, ohne Codeänderung.
+- Ein nicht erreichbarer Server verzögert die Anzeige der übrigen Server nicht.
 - Statusabfrage blockiert nicht unnötig JDA Event Threads.
 - Polling kann kontrolliert gestoppt werden.
 
@@ -969,6 +1007,8 @@ Sichere minimale Schnittstelle für Kingdoms- und Monitoring-Events.
 - [ ] JSON Validation.
 - [ ] Event Enum/Schema.
 - [ ] unbekannte Events ablehnen.
+- [ ] `server`-Feld gegen die konfigurierten Server Keys prüfen.
+- [ ] Kingdoms-Events nur vom dafür markierten Server annehmen.
 - [ ] Event Dispatcher implementieren.
 - [ ] relevante Requests strukturiert loggen, ohne Secret.
 - [ ] Fehlerantworten konsistent gestalten.
@@ -979,6 +1019,8 @@ Sichere minimale Schnittstelle für Kingdoms- und Monitoring-Events.
 - Ungültige Payload crasht den Bot nicht.
 - große/unerwartete Requests werden begrenzt.
 - Events erreichen genau das zuständige Modul.
+- Events mit unbekanntem Server Key werden abgelehnt.
+- Ein Server ohne `kingdoms-events` kann keine Kingdoms-Events einspeisen.
 - doppelte Events können für kritische Fälle dedupliziert werden.
 
 ---
@@ -1164,7 +1206,8 @@ OFFLINE
 ### Aufgaben
 
 - [ ] Monitoring Event Intake über internes API.
-- [ ] Status pro Service speichern.
+- [ ] Status pro Server und Service getrennt speichern.
+- [ ] nur Server mit `monitored: true` überwachen.
 - [ ] Zustandswechsel erkennen.
 - [ ] nur bei Zustandswechsel posten.
 - [ ] Wiederherstellung melden.
@@ -1176,6 +1219,8 @@ OFFLINE
 
 - Offline-Event jede Minute erzeugt nicht jede Minute eine neue Nachricht.
 - `OFFLINE -> ONLINE` erzeugt Recovery-Meldung.
+- Meldungen benennen den betroffenen Server eindeutig.
+- Der Ausfall eines Servers löst keine Meldung für andere Server aus.
 - Restart verliert den letzten relevanten Status nicht.
 - Monitoring Events können nicht ohne Authentifizierung eingespeist werden.
 
@@ -1233,6 +1278,7 @@ Schmale Weboberfläche für Staff: Konfiguration pflegen und Botzustand einsehen
 - [ ] Config-Endpoints mit Validierung jeder ID gegen die Guild.
 - [ ] atomares Schreiben der `config.yml` plus Reload ohne Neustart.
 - [ ] Channel- und Rollenlisten als Auswahlhilfen bereitstellen.
+- [ ] Serverliste im Web UI anlegen, bearbeiten und deaktivieren.
 - [ ] Config-Änderungen im Audit Log erfassen.
 - [ ] Statusseite, Config-Formular und Audit-Ansicht im Frontend.
 - [ ] 401-, 403- und Fehlerzustände im Frontend sichtbar machen.
@@ -1276,6 +1322,7 @@ add web ui pages
 - [ ] Scheduler-Recovery testen.
 - [ ] Status-Recovery testen.
 - [ ] Rate Limits und Discord API Fehler testen.
+- [ ] Verhalten mit mehreren konfigurierten Servern testen.
 - [ ] relevante Commands mit falschen Permissions testen.
 - [ ] Dependency-Versionen pinnen.
 - [ ] CI Build/Test aktivieren.
@@ -1310,6 +1357,7 @@ Priorität auf Logik, die ohne Discord-Netzwerk getestet werden kann:
 - Reminder Scheduling,
 - Event Validation,
 - Config Validation,
+- Server-Key-Auflösung aus der Config,
 - OAuth State Lifecycle,
 - Session Expiry,
 - Web Authorization Decisions.
@@ -1339,7 +1387,8 @@ Testfälle:
 - manipulierte Role Interaction,
 - Ticket Create/Claim/Add/Remove/Close,
 - Warn/Timeout/Kick/Ban soweit sicher testbar,
-- Minecraft Status online/offline,
+- Minecraft Status online/offline bei mehreren Servern,
+- Event mit unbekanntem Server Key,
 - Web-Login, Zugriff ohne Staffrolle, Rollenentzug bei offener Session,
 - Linking Erfolg/Timeout/Doppelverwendung,
 - Kingdom Role Sync,
@@ -1373,6 +1422,8 @@ Vor MVP-Abnahme prüfen:
 - [ ] Web-Endpoints prüfen Guild-Mitgliedschaft und Staffrolle bei jedem Request.
 - [ ] Web UI ist nur über TLS erreichbar.
 - [ ] Config-Schreibzugriffe validieren jede ID gegen die Guild.
+- [ ] Events werden nur von konfigurierten Server Keys angenommen.
+- [ ] Kingdoms-Events stammen nur vom dafür markierten Server.
 
 ---
 
