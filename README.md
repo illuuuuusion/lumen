@@ -13,7 +13,7 @@ MVP concept in [DISCORD_BOT_MVP_LUMEN.md](DISCORD_BOT_MVP_LUMEN.md).
 | Language | Java 25 |
 | Discord | JDA 5 |
 | Build | Gradle (Kotlin DSL) |
-| Storage | SQLite (from phase 2) |
+| Storage | SQLite (`sqlite-jdbc`, no ORM) |
 | Logging | SLF4J + Logback to stdout |
 
 ## Architecture
@@ -37,7 +37,8 @@ web            static UI bundle, Discord OAuth login, config API
 
 Kingdoms stays the source of truth for gameplay state; Lumen only mirrors it.
 
-Only `core` exists so far — the remaining packages are added in their phases.
+Only `core` and `storage` exist so far — the remaining packages are added in
+their phases.
 
 ## Local setup
 
@@ -78,6 +79,22 @@ Secrets come from environment variables only and are never committed. See
 Non-sensitive Discord IDs (guild, channels, roles) live in `config.yml`
 (see [config.example.yml](config.example.yml)), never hardcoded in commands or
 event handlers. Look them up via `config.id("channels.status")`.
+
+## Storage
+
+SQLite, one file, no ORM and no migration framework. `Database.open()` creates
+the file (and its directory) if missing, sets WAL plus a busy timeout, and
+applies every pending migration on startup.
+
+The applied schema version is SQLite's own `PRAGMA user_version`, so there is no
+bookkeeping table. `Schema.MIGRATIONS` is append-only: each entry is one
+version, and an entry that has shipped is never edited — corrections arrive as a
+new entry. A database at a *higher* version than the build knows is refused at
+startup rather than silently used.
+
+SQL belongs in a repository under `storage`, never in a command or event
+handler. `SelfRoleRepository` is the reference implementation; the repositories
+for the other tables follow its shape and arrive with the phase that needs them.
 
 ## Commands
 

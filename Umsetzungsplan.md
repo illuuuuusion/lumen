@@ -832,13 +832,13 @@ Persistente MVP-Daten mit einfacher Migration.
 
 ### Aufgaben
 
-- [ ] SQLite-Verbindung einrichten.
-- [ ] DB-Dateipfad konfigurierbar machen.
-- [ ] Migrationen einführen.
-- [ ] erste Tabellen anlegen.
-- [ ] Repository-Layer implementieren.
-- [ ] Startup-Migration automatisch ausführen.
-- [ ] Tests gegen temporäre SQLite-DB hinzufügen.
+- [x] SQLite-Verbindung einrichten.
+- [x] DB-Dateipfad konfigurierbar machen.
+- [x] Migrationen einführen.
+- [x] erste Tabellen anlegen.
+- [x] Repository-Layer implementieren.
+- [x] Startup-Migration automatisch ausführen.
+- [x] Tests gegen temporäre SQLite-DB hinzufügen.
 
 ### Akzeptanzkriterien
 
@@ -846,6 +846,19 @@ Persistente MVP-Daten mit einfacher Migration.
 - Neustart zerstört keine Daten.
 - Migrationen sind versionsbasiert und reproduzierbar.
 - Fachmodule greifen nicht mit ad-hoc SQL quer durch das Projekt auf die DB zu.
+
+### Umsetzungsnotizen
+
+- Verbindung, Migration und Repositories liegen in `net.illunium.lumen.storage`.
+- Die Schemaversion steht in SQLites eigenem `PRAGMA user_version`. Kein Migrations-Framework und keine eigene Versionstabelle.
+- `Schema.MIGRATIONS` ist append-only: ein ausgelieferter Eintrag wird nie geändert, Korrekturen kommen als neuer Eintrag.
+- Eine Datenbank mit höherer Version als der Build kennt wird beim Start abgelehnt, statt stillschweigend weiterzulaufen.
+- DB-Pfad über `LUMEN_DATABASE_PATH`, Default `data/lumen.db`. Fehlende Verzeichnisse werden angelegt.
+- Eine Verbindung, kein Pool. WAL plus `busy_timeout` reichen für das Schreibvolumen eines Discord-Bots.
+- Zeitstempel als ISO-8601-Text: SQLite hat keinen Datumstyp, ISO-8601 sortiert und vergleicht lexikographisch korrekt.
+- `tickets` und `warnings` nutzen `AUTOINCREMENT`, damit IDs nach dem Löschen alter Zeilen nicht wiederverwendet werden.
+- Die Tabelle `users` wurde weggelassen. Der Plan nennt für sie keine fachlichen Anforderungen, Discord ist das Benutzerverzeichnis und alle Tabellen schlüsseln direkt auf die Discord-User-ID. Sie kommt, sobald etwas eigene Benutzerzeilen braucht.
+- `SelfRoleRepository` ist die Referenzimplementierung des Repository-Layers. Die übrigen Repositories folgen derselben Form und entstehen in der Phase, die sie braucht, statt jetzt als Vorrat.
 
 ---
 
