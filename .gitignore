@@ -1,0 +1,30 @@
+# Build
+build/
+.gradle/
+!gradle/wrapper/gradle-wrapper.jar
+
+# Secrets and local config
+.env
+*.env
+!.env.example
+config.yml
+config.yaml
+
+# Database
+*.db
+*.db-journal
+*.sqlite
+data/
+
+# IDE
+.idea/
+*.iml
+.vscode/
+*.ipr
+*.iws
+.classpath
+.project
+.settings/
+
+# OS
+.DS_Store
