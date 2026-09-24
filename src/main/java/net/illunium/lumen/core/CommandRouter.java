@@ -7,9 +7,12 @@ import java.util.Map;
 import net.dv8tion.jda.api.entities.Guild;
 import net.dv8tion.jda.api.entities.Role;
 import net.dv8tion.jda.api.events.interaction.command.SlashCommandInteractionEvent;
+import net.dv8tion.jda.api.events.interaction.component.GenericComponentInteractionCreateEvent;
 import net.dv8tion.jda.api.events.session.ReadyEvent;
 import net.dv8tion.jda.api.events.session.SessionDisconnectEvent;
 import net.dv8tion.jda.api.hooks.ListenerAdapter;
+import net.dv8tion.jda.api.interactions.Interaction;
+import net.dv8tion.jda.api.interactions.callbacks.IReplyCallback;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -68,18 +71,40 @@ public final class CommandRouter extends ListenerAdapter {
             event.reply("Diesen Befehl kenne ich nicht.").setEphemeral(true).queue();
             return;
         }
-        List<Long> roleIds = event.getMember() == null
-                ? List.of()
-                : event.getMember().getRoles().stream().map(Role::getIdLong).toList();
-        if (!isAllowed(command.staffOnly(), roleIds, config.id("roles.staff"))) {
-            log.info("Rejected /{} for user {}", event.getName(), event.getUser().getId());
+        String path = subcommandPath(event.getSubcommandGroup(), event.getSubcommandName());
+        boolean staffOnly = needsStaff(command, path);
+        if (!isAllowed(staffOnly, memberRoleIds(event), config.id("roles.staff"))) {
+            log.info("Rejected /{}{} for user {}", event.getName(),
+                    path.isEmpty() ? "" : " " + path, event.getUser().getId());
             event.reply("Dir fehlen die Rechte für diesen Befehl.").setEphemeral(true).queue();
             return;
         }
+        run(event, "/" + event.getName(), () -> command.handle(event));
+    }
+
+    /**
+     * Routes a button or select menu to the command that owns it, by the {@code <command>:}
+     * prefix of its ID, through the same error handling as a slash command.
+     */
+    @Override
+    public void onGenericComponentInteractionCreate(GenericComponentInteractionCreateEvent event) {
+        String id = event.getComponentId();
+        Command command = commands.get(id.split(":", 2)[0]);
+        if (command == null) {
+            // A panel from an older build, or a command that no longer exists.
+            log.warn("No command owns component '{}'", id);
+            event.reply("Dieses Element ist nicht mehr aktiv.").setEphemeral(true).queue();
+            return;
+        }
+        run(event, "component " + id, () -> command.handleComponent(event));
+    }
+
+    /** Shared error handler: an interaction never dies silently and never kills the bot. */
+    private void run(IReplyCallback event, String what, Runnable handler) {
         try {
-            command.handle(event);
+            handler.run();
         } catch (RuntimeException e) {
-            log.error("Command /{} failed", event.getName(), e);
+            log.error("{} failed", what, e);
             String message = "Da ist etwas schiefgelaufen. Bitte melde dich beim Team.";
             if (event.isAcknowledged()) {
                 event.getHook().sendMessage(message).setEphemeral(true).queue();
@@ -87,6 +112,24 @@ public final class CommandRouter extends ListenerAdapter {
                 event.reply(message).setEphemeral(true).queue();
             }
         }
+    }
+
+    private static List<Long> memberRoleIds(Interaction event) {
+        return event.getMember() == null
+                ? List.of()
+                : event.getMember().getRoles().stream().map(Role::getIdLong).toList();
+    }
+
+    /** {@code "group sub"}, {@code "sub"} or {@code ""}, matching {@link Command#staffOnlySubcommands()}. */
+    public static String subcommandPath(String group, String name) {
+        if (name == null) {
+            return "";
+        }
+        return group == null ? name : group + " " + name;
+    }
+
+    static boolean needsStaff(Command command, String subcommandPath) {
+        return command.staffOnly() || command.staffOnlySubcommands().contains(subcommandPath);
     }
 
     static boolean isAllowed(boolean staffOnly, List<Long> memberRoleIds, long staffRoleId) {

@@ -10,7 +10,9 @@ import net.illunium.lumen.core.HelpCommand;
 import net.illunium.lumen.core.StatusCommand;
 import net.illunium.lumen.notifications.NotificationType;
 import net.illunium.lumen.notifications.Notifications;
+import net.illunium.lumen.roles.SelfRolesCommand;
 import net.illunium.lumen.storage.Database;
+import net.illunium.lumen.storage.SelfRoleRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -32,8 +34,14 @@ public final class Lumen {
         router.register(new HelpCommand(router));
         router.register(new StatusCommand(health));
 
+        // Notifications need the JDA instance, so this command is registered after build().
+        // The router stays attached from build() on, because a missed ReadyEvent would mean
+        // no commands are published at all; the gap until register() is a few microseconds
+        // against a gateway handshake.
         JDA jda = JDABuilder.createDefault(token).addEventListeners(router).build();
         Notifications notifications = new Notifications(jda, config);
+        router.register(new SelfRolesCommand(
+                new SelfRoleRepository(database), notifications, config));
         Runtime.getRuntime().addShutdownHook(
                 new Thread(() -> shutdown(jda, database, notifications), "lumen-shutdown"));
 

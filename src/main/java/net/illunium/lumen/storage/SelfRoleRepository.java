@@ -27,7 +27,15 @@ public final class SelfRoleRepository {
 
     /** Every enabled self role, ordered by label so panels are stable across restarts. */
     public List<SelfRole> enabled() {
-        String sql = "SELECT role_id, label, enabled FROM self_roles WHERE enabled = 1 ORDER BY label";
+        return query("SELECT role_id, label, enabled FROM self_roles WHERE enabled = 1 ORDER BY label");
+    }
+
+    /** Every self role including the disabled ones, for staff to see what is configured. */
+    public List<SelfRole> all() {
+        return query("SELECT role_id, label, enabled FROM self_roles ORDER BY label");
+    }
+
+    private List<SelfRole> query(String sql) {
         try (PreparedStatement statement = database.connection().prepareStatement(sql);
                 ResultSet result = statement.executeQuery()) {
             List<SelfRole> roles = new ArrayList<>();
@@ -56,14 +64,18 @@ public final class SelfRoleRepository {
         }
     }
 
-    /** Removes the role. Returns {@code false} if it was not stored, so callers stay idempotent. */
-    public boolean remove(long roleId) {
-        try (PreparedStatement statement =
-                database.connection().prepareStatement("DELETE FROM self_roles WHERE role_id = ?")) {
+    /**
+     * Turns the role off without forgetting its label, so re-enabling it later keeps the
+     * name staff chose. Returns {@code false} if it was not stored or already off, which
+     * makes a repeated call a no-op rather than an error.
+     */
+    public boolean disable(long roleId) {
+        String sql = "UPDATE self_roles SET enabled = 0 WHERE role_id = ? AND enabled = 1";
+        try (PreparedStatement statement = database.connection().prepareStatement(sql)) {
             statement.setLong(1, roleId);
             return statement.executeUpdate() > 0;
         } catch (SQLException e) {
-            throw new IllegalStateException("Cannot remove self role " + roleId, e);
+            throw new IllegalStateException("Cannot disable self role " + roleId, e);
         }
     }
 }

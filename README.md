@@ -37,8 +37,8 @@ web            static UI bundle, Discord OAuth login, config API
 
 Kingdoms stays the source of truth for gameplay state; Lumen only mirrors it.
 
-Only `core`, `storage` and `notifications` exist so far — the remaining packages
-are added in their phases.
+Only `core`, `storage`, `notifications` and `roles` exist so far — the remaining
+packages are added in their phases.
 
 ## Local setup
 
@@ -124,8 +124,46 @@ the cases where the config holds something more specific, such as a per-server
 
 Commands implement `Command` and are registered on the `CommandRouter`, which
 publishes them to the configured guild on startup and handles permission checks
-and errors centrally. A command with `staffOnly()` requires the `roles.staff`
-role. `/help` and `/status` exist so far.
+and errors centrally.
+
+A command with `staffOnly()` requires the `roles.staff` role. Discord applies
+default permissions per command and not per subcommand, so a command that is
+public for members but administrative in parts lists those paths in
+`staffOnlySubcommands()` (e.g. `"panel create"`) and the router gates them.
+
+Buttons and select menus are routed by the `<command>:` prefix of their
+component ID to `handleComponent`, through the same error handler.
+
+`/help`, `/status` and `/roles` exist so far.
+
+## Self roles
+
+Members assign themselves roles from a select menu; staff decides which roles
+are on offer. The allowed roles live in the `self_roles` table, not in
+`config.yml`.
+
+| Command | Who | Effect |
+|---|---|---|
+| `/roles pick` | everyone | ephemeral menu, current roles preselected |
+| `/roles panel create` | staff | posts a public, persistent panel in this channel |
+| `/roles allow <role> [label]` | staff | offers a role |
+| `/roles deny <role>` | staff | takes it off the menu, keeping its label |
+| `/roles list` | staff | every entry and its state |
+
+The selection is the member's desired end state: an offered role left
+unselected is removed.
+
+Two guards hold this up, enforced independently:
+
+- Submitted values are never trusted. Every application re-reads `self_roles`
+  and intersects, so a forged interaction can name any role ID and get nothing.
+- Roles with privileged permissions, `@everyone`, integration-managed roles and
+  the staff role are refused — when staff allows them *and again on every
+  grant*. The second check is the one that matters: a harmless role allowed last
+  week can be given Administrator today.
+
+The bot needs `MANAGE_ROLES` and its highest role must sit above every offered
+role; both are checked and reported rather than failing.
 
 ## Conventions
 

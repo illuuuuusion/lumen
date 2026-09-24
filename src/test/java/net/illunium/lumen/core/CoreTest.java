@@ -8,6 +8,10 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import java.io.StringReader;
 import java.time.Duration;
 import java.util.List;
+import java.util.Set;
+import net.dv8tion.jda.api.events.interaction.command.SlashCommandInteractionEvent;
+import net.dv8tion.jda.api.interactions.commands.build.Commands;
+import net.dv8tion.jda.api.interactions.commands.build.SlashCommandData;
 import org.junit.jupiter.api.Test;
 
 class CoreTest {
@@ -59,6 +63,59 @@ class CoreTest {
         assertTrue(CommandRouter.isAllowed(true, List.of(7L, 42L), 42L));
         assertFalse(CommandRouter.isAllowed(true, List.of(7L), 42L));
         assertFalse(CommandRouter.isAllowed(true, List.of(), 42L));
+    }
+
+    @Test
+    void subcommandPathMatchesHowCommandsDeclareIt() {
+        assertEquals("", CommandRouter.subcommandPath(null, null));
+        assertEquals("pick", CommandRouter.subcommandPath(null, "pick"));
+        assertEquals("panel create", CommandRouter.subcommandPath("panel", "create"));
+    }
+
+    @Test
+    void aPublicCommandCanStillGateSingleSubcommands() {
+        Command roles = new Command() {
+            @Override
+            public SlashCommandData data() {
+                return Commands.slash("roles", "Self Roles");
+            }
+
+            @Override
+            public void handle(SlashCommandInteractionEvent event) {
+            }
+
+            @Override
+            public Set<String> staffOnlySubcommands() {
+                return Set.of("allow", "panel create");
+            }
+        };
+        assertFalse(CommandRouter.needsStaff(roles, ""), "the command itself is public");
+        assertFalse(CommandRouter.needsStaff(roles, "pick"));
+        assertTrue(CommandRouter.needsStaff(roles, "allow"));
+        assertTrue(CommandRouter.needsStaff(roles, "panel create"));
+        assertFalse(CommandRouter.needsStaff(roles, "panel"),
+                "a group without its subcommand is not the gated path");
+    }
+
+    @Test
+    void aStaffOnlyCommandGatesEverySubcommand() {
+        Command staffCommand = new Command() {
+            @Override
+            public SlashCommandData data() {
+                return Commands.slash("audit", "Staff only");
+            }
+
+            @Override
+            public void handle(SlashCommandInteractionEvent event) {
+            }
+
+            @Override
+            public boolean staffOnly() {
+                return true;
+            }
+        };
+        assertTrue(CommandRouter.needsStaff(staffCommand, ""));
+        assertTrue(CommandRouter.needsStaff(staffCommand, "anything"));
     }
 
     @Test

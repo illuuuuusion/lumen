@@ -914,19 +914,48 @@ Einfacher Reaction-Role-Ersatz ohne komplexen Editor.
 
 ### Aufgaben
 
-- [ ] Self Roles in Config oder DB pflegen.
-- [ ] `/roles` implementieren.
-- [ ] `/roles panel create` für Admins.
-- [ ] Button- oder Select-Menu-Panel erzeugen.
-- [ ] Rolle hinzufügen/entfernen.
-- [ ] nur explizit erlaubte Rollen akzeptieren.
-- [ ] Hierarchie-/Permission-Fehler behandeln.
+- [x] Self Roles in Config oder DB pflegen.
+- [x] `/roles` implementieren.
+- [x] `/roles panel create` für Admins.
+- [x] Button- oder Select-Menu-Panel erzeugen.
+- [x] Rolle hinzufügen/entfernen.
+- [x] nur explizit erlaubte Rollen akzeptieren.
+- [x] Hierarchie-/Permission-Fehler behandeln.
 
 ### Akzeptanzkriterien
 
 - Nutzer können erlaubte Self Roles selbst setzen und entfernen.
 - Nicht freigegebene Rollen können nicht über manipulierte Interactions vergeben werden.
 - Staff-/Admin-Rollen sind nicht über Self Roles erreichbar.
+
+### Umsetzungsnotizen
+
+- `net.illunium.lumen.roles.SelfRolesCommand`, Self Roles in der DB (`self_roles`), nicht in der Config.
+
+| Befehl | Recht | Wirkung |
+|---|---|---|
+| `/roles pick` | alle | ephemeres Select-Menü, eigene Rollen vorausgewählt |
+| `/roles panel create` | Staff | öffentliches, dauerhaftes Panel in diesem Channel |
+| `/roles allow <role> [label]` | Staff | gibt eine Rolle frei |
+| `/roles deny <role>` | Staff | deaktiviert sie, Label bleibt erhalten |
+| `/roles list` | Staff | zeigt alle Einträge samt Zustand |
+
+- **Abweichung:** Der Plan nennt `/roles` und `/roles panel create`. Discord erlaubt nicht beides, ein Command mit Subcommands ist selbst nicht aufrufbar. Daher `/roles pick` für Mitglieder; `/roles panel create` bleibt wörtlich wie geplant.
+- Die Auswahl ist der Zielzustand: eine freigegebene, aber nicht ausgewählte Rolle wird entfernt. Steht so im Panel- und Menütext.
+- Die übermittelten Werte werden nie geglaubt. Bei jeder Anwendung wird `self_roles` frisch gelesen und geschnitten. Eine gefälschte Interaction kann jede beliebige Rollen-ID nennen und bekommt nichts.
+- Rollen mit privilegierten Rechten, `@everyone`, integrationsverwaltete Rollen und die Staff-Rolle werden abgelehnt: beim Freigeben **und erneut bei jeder Vergabe**. Der zweite Check ist der entscheidende, weil eine harmlose Rolle nachträglich Administrator bekommen kann. Betroffene Rollen fallen aus dem Menü, landen im Log und werden dem Nutzer als „nicht verfügbar" genannt.
+- Hierarchie und `MANAGE_ROLES` werden geprüft, bevor etwas vergeben wird; beides erzeugt eine verständliche Antwort statt eines Fehlers.
+- `deny` deaktiviert statt zu löschen. Sonst wäre die Spalte `enabled` aus Abschnitt 6.1 ohne Funktion, und das von Staff vergebene Label ginge bei jedem Aus- und Wiedereinschalten verloren. Bereits vergebene Rollen bleiben bei den Mitgliedern.
+- Freigabe und Deaktivierung gehen als `STAFF`-Notification nach `#bot-log`.
+- Menü hart auf 25 Optionen begrenzt, Discords Limit. Kein Paging.
+
+### Vorarbeiten in Phase 1 und 2
+
+Drei Lücken mussten vor Phase 4 geschlossen werden:
+
+- `CommandRouter` routet jetzt auch Button- und Select-Menü-Interaktionen, über den Präfix `<command>:` der Component-ID. Kein zweites Registry, gleicher zentraler Error Handler wie bei Slash Commands.
+- `Command.staffOnlySubcommands()`: Discord vergibt Default-Rechte pro Command, nicht pro Subcommand. `/roles pick` ist öffentlich, `/roles allow` nicht. Die Prüfung bleibt zentral im Router.
+- `SelfRoleRepository.all()` für die Staff-Ansicht, `disable()` statt `remove()`.
 
 ---
 

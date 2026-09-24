@@ -57,12 +57,17 @@ class StorageTest {
 
             assertEquals(List.of("East", "North"), roles.enabled().stream().map(r -> r.label()).toList());
 
-            roles.put(2L, "East", false);
+            assertTrue(roles.disable(2L));
+            assertFalse(roles.disable(2L), "disabling twice is a no-op, not an error");
             assertEquals(List.of("North"), roles.enabled().stream().map(r -> r.label()).toList());
+            assertEquals(List.of("East", "North"), roles.all().stream().map(r -> r.label()).toList(),
+                    "a disabled role keeps its label and stays visible to staff");
 
-            assertTrue(roles.remove(1L));
-            assertFalse(roles.remove(1L));
-            assertEquals(List.of(), roles.enabled());
+            roles.put(2L, "East", true);
+            assertEquals(List.of("East", "North"), roles.enabled().stream().map(r -> r.label()).toList(),
+                    "allowing it again brings it back");
+
+            assertFalse(roles.disable(999L), "a role that was never stored cannot be disabled");
         }
     }
 
