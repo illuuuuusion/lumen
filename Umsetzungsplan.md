@@ -685,6 +685,37 @@ CSRF: `SameSite=Strict` plus schreibende Requests ausschließlich als `POST`/`PU
 
 Die Phasen werden in dieser Reihenfolge umgesetzt. Innerhalb einer Phase darf die genaue Commit-Aufteilung an den Repository-Stand angepasst werden.
 
+## Abhängigkeiten zum Kingdoms-Plugin
+
+Für die Zeitplanung entscheidend ist, welche Phasen allein im Bot-Repo fertig werden und welche eine Zulieferung von außen brauchen.
+
+| Phase | Abhängigkeit | Was von außen gebraucht wird |
+|---|---|---|
+| 0 Repository Baseline | keine | – |
+| 1 Bot Core | keine | – |
+| 2 Storage / SQLite | keine | – |
+| 3 Notification Layer | keine | – |
+| 4 Self Roles | keine | – |
+| 5 Ticket System | keine | – |
+| 6 Moderation Basics | keine | – |
+| 7 Minecraft Status | Infrastruktur | erreichbarer Server, Adresse und Port. Kein Plugin-Code: der Status kommt über den Server List Ping. |
+| 8 Internal Event API | Absprache | gemeinsam festgelegtes Event-Schema und Shared Secret. Die Bot-Seite ist ohne Plugin testbar. |
+| 9 Account Linking | Plugin | `/discord link <code>` im Spiel und ein Request mit Code, UUID und Name an den Bot. |
+| 10 Kingdom Role Sync | Plugin | `KINGDOM_MEMBER_UPDATED`-Events bei jeder Kingdom-Zuordnung. |
+| 11 Kingdoms Match Integration | Plugin | Match-Events von Check-in bis Ergebnis, inklusive Playoff- und Wealth-Events. |
+| 12 Match Reminder | Plugin | Matchplan mit verbindlichen Startzeiten. |
+| 13 Monitoring | Infrastruktur | externer Health Check, der Events einspeist. Kein Plugin-Code, da ein abgestürzter Server nichts mehr melden kann. |
+| 14 Logging und Audit | keine | – |
+| 15 Web UI | keine | – |
+| 16 Production Hardening | gemeinsamer Test | Abnahme über beide Seiten hinweg. |
+
+Daraus folgt für die Planung:
+
+- Die Phasen 0 bis 7 sowie 14 und 15 laufen unabhängig vom Plugin-Team durch. Sie eignen sich für Zeiträume, in denen das Kingdoms-Plugin nicht verfügbar ist.
+- Das Event-Schema aus Phase 8 ist die einzige frühe Terminsache. Es sollte festgelegt werden, sobald Phase 8 ansteht, damit das Plugin-Team parallel bauen kann, während der Bot bei den Phasen 9 bis 12 ankommt.
+- Die Phasen 9 bis 12 sind die einzigen echten Blockierpunkte. Solange das Plugin noch nicht sendet, wird die Bot-Seite gegen manuell abgesetzte Requests gebaut und getestet.
+- Ein Modul gilt erst als fertig, wenn es mit echten Plugin-Events lief, nicht nur mit simulierten.
+
 ---
 
 ## Phase 0 – Repository Baseline
