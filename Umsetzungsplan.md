@@ -967,18 +967,18 @@ Ticket Tool für einfache Support-/Report-Fälle im MVP ersetzen.
 
 ### Aufgaben
 
-- [ ] Ticket Panel erstellen.
-- [ ] `Support` und `Report` als Tickettypen unterstützen.
-- [ ] privaten Ticket-Channel anlegen.
-- [ ] korrekte Permission Overwrites setzen.
-- [ ] Ticket-ID persistent erzeugen.
-- [ ] `Claim` implementieren.
-- [ ] `Add User` implementieren.
-- [ ] `Remove User` implementieren.
-- [ ] `Close` implementieren.
-- [ ] Close-Metadaten speichern.
-- [ ] optional: einfachen Text- oder HTML-Transcript erzeugen.
-- [ ] geschlossene Tickets archivieren oder nach definierter Frist löschen.
+- [x] Ticket Panel erstellen.
+- [x] `Support` und `Report` als Tickettypen unterstützen.
+- [x] privaten Ticket-Channel anlegen.
+- [x] korrekte Permission Overwrites setzen.
+- [x] Ticket-ID persistent erzeugen.
+- [x] `Claim` implementieren.
+- [x] `Add User` implementieren.
+- [x] `Remove User` implementieren.
+- [x] `Close` implementieren.
+- [x] Close-Metadaten speichern.
+- [x] optional: einfachen Text- oder HTML-Transcript erzeugen.
+- [x] geschlossene Tickets archivieren oder nach definierter Frist löschen.
 
 ### Akzeptanzkriterien
 
@@ -994,6 +994,52 @@ Ticket Tool für einfache Support-/Report-Fälle im MVP ersetzen.
 - kein SLA-System,
 - keine Automationsregeln,
 - kein Dashboard.
+
+### Umsetzungsnotizen
+
+- `net.illunium.lumen.tickets.TicketCommand`, Zustand in der Tabelle `tickets`
+  (`net.illunium.lumen.storage.TicketRepository`).
+
+| Befehl / Button | Recht | Wirkung |
+|---|---|---|
+| Panel-Button `Support` / `Report` | alle | öffnet ein Ticket |
+| `/ticket create <typ>` | alle | dasselbe ohne Panel |
+| Button `Übernehmen` | Staff | Claim |
+| Button `Schließen` / `/ticket close` | Ersteller oder Staff | Close |
+| `/ticket add <user>` | Staff | gibt Zugriff auf diesen Ticket-Channel |
+| `/ticket remove <user>` | Staff | nimmt den Zugriff wieder weg |
+| `/ticket panel create` | Staff | postet das Panel in diesen Channel |
+
+- Sichtbarkeit hängt vollständig an den Permission Overwrites des Channels:
+  `@everyone` bekommt `VIEW_CHANNEL` verweigert, Ersteller, Staff-Rolle und Bot
+  bekommen sie explizit. Es gibt keine Stelle, an der Code zur Laufzeit
+  entscheidet, wer ein fremdes Ticket sehen darf.
+- Claim- und Close-Zustand stehen in der DB, nicht im Channel, und beide sind
+  bedingte Updates (`WHERE status = 'OPEN'` bzw. `WHERE status <> 'CLOSED'`).
+  Damit überlebt Claim einen Neustart und ein zweiter Klick auf `Schließen`
+  ändert nichts und löscht nichts doppelt.
+- Ticket-ID ist der Primärschlüssel der Zeile und zugleich der Channelname
+  (`ticket-0042`). Der Channel entsteht vor der Zeile, weil die Zeile seine ID
+  braucht — er wird deshalb unter einem Platzhalternamen angelegt und danach
+  umbenannt. Eine geratene Nummer hätte sich zwei gleichzeitige Tickets teilen
+  können.
+- **Abweichung:** `Add User`/`Remove User` sind Staff-Rechte, nicht Ersteller-
+  Rechte. Bei einem Report würde der Gemeldete sonst vom Melder selbst in den
+  Channel geholt werden können.
+- Close-Reihenfolge: DB-Update → Channel sperren (`MESSAGE_SEND` für alle
+  Mitglieder-Overwrites außer dem Bot verweigert) → Transcript als `.txt` nach
+  `#bot-log` → Channel 30 Sekunden später löschen. Das Löschen wird erst
+  angestoßen, wenn das Transcript raus ist; scheitert das Archivieren, bleibt der
+  Channel stehen statt das Gespräch zu verlieren.
+- Ein von Hand gelöschter Ticket-Channel hinterlässt eine `OPEN`-Zeile. Der
+  einzige Ort, an dem das schadet, ist die nächste Ticket-Eröffnung desselben
+  Nutzers — genau dort wird die Zeile geschlossen. Kein Channel-Delete-Listener,
+  kein Startup-Sweep.
+- Ein Nutzer hat maximal ein offenes Ticket; Doppelklicks aufs Panel fängt eine
+  In-Memory-Sperre ab.
+- Komponenten-IDs (`ticket:create:SUPPORT`, `ticket:claim`, `ticket:close`)
+  kommen vom Client und überleben jeden Build, der das Panel gepostet hat. Der
+  Typ wird deshalb gegen die Enum-Konstanten geprüft, nicht `valueOf` zugeworfen.
 
 ---
 

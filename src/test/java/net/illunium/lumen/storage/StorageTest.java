@@ -2,6 +2,7 @@ package net.illunium.lumen.storage;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -10,6 +11,10 @@ import java.nio.file.Path;
 import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.List;
+import java.util.Optional;
+import net.illunium.lumen.storage.TicketRepository.Status;
+import net.illunium.lumen.storage.TicketRepository.Ticket;
+import net.illunium.lumen.storage.TicketRepository.Type;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -68,6 +73,61 @@ class StorageTest {
                     "allowing it again brings it back");
 
             assertFalse(roles.disable(999L), "a role that was never stored cannot be disabled");
+        }
+    }
+
+    @Test
+    void ticketLifecycleSurvivesARestartAndRepeatedButtons(@TempDir Path dir) {
+        Path file = dir.resolve("lumen.db");
+        long channel = 500L;
+        long creator = 99L;
+        long staff = 7L;
+
+        try (Database database = Database.open(file)) {
+            TicketRepository tickets = new TicketRepository(database);
+            Ticket first = tickets.open(channel, creator, Type.SUPPORT);
+            assertEquals("ticket-0001", first.name(), "the ticket ID is the channel name");
+            assertEquals(Status.OPEN, first.status());
+
+            assertEquals(Optional.of(first), tickets.openByCreator(creator));
+            assertTrue(tickets.openByCreator(creator + 1).isEmpty());
+
+            assertTrue(tickets.claim(channel, staff));
+            assertFalse(tickets.claim(channel, staff + 1),
+                    "a second claim must not steal the ticket");
+        }
+
+        try (Database database = Database.open(file)) {
+            TicketRepository tickets = new TicketRepository(database);
+            Ticket reopened = tickets.byChannel(channel).orElseThrow();
+            assertEquals(Status.CLAIMED, reopened.status(), "claim state survives a restart");
+            assertEquals(staff, reopened.claimedBy());
+
+            assertTrue(tickets.close(channel, staff));
+            assertFalse(tickets.close(channel, staff), "close is idempotent");
+
+            Ticket closed = tickets.byChannel(channel).orElseThrow();
+            assertTrue(closed.closed());
+            assertTrue(tickets.openByCreator(creator).isEmpty(),
+                    "a closed ticket no longer blocks the next one");
+
+            Ticket second = tickets.open(channel + 1, creator, Type.REPORT);
+            assertEquals("ticket-0002", second.name(), "ticket IDs keep counting up");
+            assertEquals(Type.REPORT, second.type());
+            assertNull(second.claimedBy());
+        }
+    }
+
+    @Test
+    void aTicketWhoseChannelVanishedCanBeClosedWithoutACloser(@TempDir Path dir) {
+        try (Database database = Database.open(dir.resolve("lumen.db"))) {
+            TicketRepository tickets = new TicketRepository(database);
+            tickets.open(500L, 99L, Type.SUPPORT);
+
+            assertTrue(tickets.close(500L, null), "nobody closed it, the channel just went away");
+            assertTrue(tickets.byChannel(500L).orElseThrow().closed());
+            assertTrue(tickets.openByCreator(99L).isEmpty(),
+                    "the stale row must not block the member forever");
         }
     }
 

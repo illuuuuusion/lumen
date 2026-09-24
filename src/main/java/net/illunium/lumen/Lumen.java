@@ -13,6 +13,8 @@ import net.illunium.lumen.notifications.Notifications;
 import net.illunium.lumen.roles.SelfRolesCommand;
 import net.illunium.lumen.storage.Database;
 import net.illunium.lumen.storage.SelfRoleRepository;
+import net.illunium.lumen.storage.TicketRepository;
+import net.illunium.lumen.tickets.TicketCommand;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -26,9 +28,10 @@ public final class Lumen {
 
     public static void main(String[] args) throws InterruptedException {
         Config config = Config.load();
-        // Channels are checked per notification and only log when unset; these two are not
-        // optional, because the whole permission layer hangs off roles.staff.
-        config.requireIds("guild.id", "roles.staff");
+        // Notification channels are checked per message and only log when unset. These three
+        // are not optional: the permission layer hangs off roles.staff, and a ticket has
+        // nowhere to be created without its category.
+        config.requireIds("guild.id", "roles.staff", "channels.tickets-category");
         String token = Config.requireEnv("DISCORD_TOKEN");
         Database database = Database.open();
 
@@ -45,6 +48,8 @@ public final class Lumen {
         Notifications notifications = new Notifications(jda, config);
         router.register(new SelfRolesCommand(
                 new SelfRoleRepository(database), notifications, config));
+        router.register(new TicketCommand(
+                new TicketRepository(database), notifications, config));
         Runtime.getRuntime().addShutdownHook(
                 new Thread(() -> shutdown(jda, database, notifications), "lumen-shutdown"));
 

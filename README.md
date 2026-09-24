@@ -37,8 +37,8 @@ web            static UI bundle, Discord OAuth login, config API
 
 Kingdoms stays the source of truth for gameplay state; Lumen only mirrors it.
 
-Only `core`, `storage`, `notifications` and `roles` exist so far — the remaining
-packages are added in their phases.
+Only `core`, `storage`, `notifications`, `roles` and `tickets` exist so far — the
+remaining packages are added in their phases.
 
 ## Local setup
 
@@ -114,6 +114,8 @@ Everything Lumen writes to Discord goes through `Notifications`. A module picks 
 notifications.send(NotificationType.CRITICAL, "Kingdoms offline", "Seit 20:14");
 ```
 
+`send(type, title, message, file)` attaches a file, e.g. a ticket transcript.
+
 A missing, unknown or unwritable channel drops the message with an explicit log
 line and never throws — a broken announcements channel must not take down a
 moderation command. `send(type, channelId, ...)` targets an explicit channel for
@@ -134,7 +136,7 @@ public for members but administrative in parts lists those paths in
 Buttons and select menus are routed by the `<command>:` prefix of their
 component ID to `handleComponent`, through the same error handler.
 
-`/help`, `/status` and `/roles` exist so far.
+`/help`, `/status`, `/roles` and `/ticket` exist so far.
 
 ## Self roles
 
@@ -164,6 +166,48 @@ Two guards hold this up, enforced independently:
 
 The bot needs `MANAGE_ROLES` and its highest role must sit above every offered
 role; both are checked and reported rather than failing.
+
+## Tickets
+
+Support and report tickets in private channels. Members open one from a panel
+button or with `/ticket create`; the state lives in the `tickets` table.
+
+| Command / button | Who | Effect |
+|---|---|---|
+| panel button `Support` / `Report` | everyone | opens a ticket |
+| `/ticket create <typ>` | everyone | the same without a panel |
+| button `Übernehmen` | staff | claims it |
+| button `Schließen`, `/ticket close` | creator or staff | closes it |
+| `/ticket add <user>` | staff | grants access to this ticket channel |
+| `/ticket remove <user>` | staff | takes it away again |
+| `/ticket panel create` | staff | posts the panel in this channel |
+
+Visibility is carried entirely by the channel's permission overwrites:
+`@everyone` is denied `VIEW_CHANNEL`, the creator, the staff role and the bot are
+granted it explicitly. No code decides at read time who may see someone else's
+ticket.
+
+Claim and close are conditional updates (`WHERE status = 'OPEN'` and
+`WHERE status <> 'CLOSED'`), so claim survives a restart and pressing close twice
+changes nothing and deletes nothing twice.
+
+The ticket ID is the row's primary key and the channel name (`ticket-0042`). The
+channel is created before the row, because the row needs its ID, so it starts
+under a placeholder name and is renamed once the ID exists — a guessed number
+could have been taken by a simultaneous second ticket.
+
+Closing runs in this order: database, lock the channel, transcript as a `.txt`
+into `#bot-log`, delete the channel 30 seconds later. The deletion is only queued
+once the transcript is out, so a failing archive leaves the channel standing
+instead of losing the conversation.
+
+A ticket channel deleted by hand leaves an `OPEN` row behind. The only place that
+hurts is the creator's next ticket, and that is where the row is closed — no
+channel-delete listener and no startup sweep. A member has at most one open
+ticket; an in-memory guard catches double-clicks on the panel.
+
+`channels.tickets-category` and `roles.staff` must be filled in, and the bot needs
+`MANAGE_CHANNEL` plus `MANAGE_PERMISSIONS` in that category.
 
 ## Conventions
 

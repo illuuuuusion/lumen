@@ -1,11 +1,13 @@
 package net.illunium.lumen.notifications;
 
 import java.time.Instant;
+import java.util.List;
 import java.util.OptionalLong;
 import net.dv8tion.jda.api.EmbedBuilder;
 import net.dv8tion.jda.api.JDA;
 import net.dv8tion.jda.api.entities.MessageEmbed;
 import net.dv8tion.jda.api.entities.channel.concrete.TextChannel;
+import net.dv8tion.jda.api.utils.FileUpload;
 import net.illunium.lumen.core.Config;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -32,14 +34,23 @@ public final class Notifications {
 
     /** Sends to the channel configured for {@code type}. */
     public void send(NotificationType type, String title, String message) {
+        send(type, title, message, null);
+    }
+
+    /**
+     * Sends with a file attached, for the cases where the embed only summarises something
+     * that has to be archived in full, such as a ticket transcript.
+     */
+    public void send(NotificationType type, String title, String message, FileUpload file) {
         OptionalLong channelId = config.findId(type.channelKey());
         // 0 is the placeholder in config.example.yml, so an unfilled ID is a missing one.
         if (channelId.isEmpty() || channelId.getAsLong() == 0L) {
             log.error("Dropped {} notification \"{}\": '{}' is not set in the config",
                     type, title, type.channelKey());
+            closeQuietly(file);
             return;
         }
-        send(type, channelId.getAsLong(), title, message);
+        send(type, channelId.getAsLong(), title, message, file);
     }
 
     /**
@@ -47,21 +58,41 @@ public final class Notifications {
      * target than the type's default, such as a per-server {@code status-channel}.
      */
     public void send(NotificationType type, long channelId, String title, String message) {
+        send(type, channelId, title, message, null);
+    }
+
+    private void send(NotificationType type, long channelId, String title, String message,
+            FileUpload file) {
         TextChannel channel = jda.getTextChannelById(channelId);
         if (channel == null) {
             log.error("Dropped {} notification \"{}\": channel {} is not a text channel the bot can see",
                     type, title, channelId);
+            closeQuietly(file);
             return;
         }
         if (!channel.canTalk()) {
             log.error("Dropped {} notification \"{}\": missing permission to post in #{}",
                     type, title, channel.getName());
+            closeQuietly(file);
             return;
         }
-        channel.sendMessageEmbeds(embed(type, title, message)).queue(
-                sent -> log.debug("Sent {} notification to #{}", type, channel.getName()),
-                error -> log.error("Failed to send {} notification \"{}\" to #{}",
-                        type, title, channel.getName(), error));
+        channel.sendMessageEmbeds(embed(type, title, message))
+                .addFiles(file == null ? List.of() : List.of(file))
+                .queue(sent -> log.debug("Sent {} notification to #{}", type, channel.getName()),
+                        error -> log.error("Failed to send {} notification \"{}\" to #{}",
+                                type, title, channel.getName(), error));
+    }
+
+    /** A dropped upload still holds an open stream; JDA only closes the ones it sends. */
+    private static void closeQuietly(FileUpload file) {
+        if (file == null) {
+            return;
+        }
+        try {
+            file.close();
+        } catch (Exception e) {
+            log.warn("Cannot close dropped attachment {}", file.getName(), e);
+        }
     }
 
     /**

@@ -114,6 +114,16 @@ public final class CommandRouter extends ListenerAdapter {
         }
     }
 
+    /**
+     * Whether the member behind this interaction holds the staff role.
+     *
+     * <p>The router gates slash commands on its own; buttons carry no permission metadata,
+     * so a component handler that is staff-only asks here instead of rebuilding the check.
+     */
+    public static boolean isStaff(Interaction event, long staffRoleId) {
+        return memberRoleIds(event).contains(staffRoleId);
+    }
+
     private static List<Long> memberRoleIds(Interaction event) {
         return event.getMember() == null
                 ? List.of()
