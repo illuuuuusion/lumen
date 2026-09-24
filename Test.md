@@ -9,6 +9,61 @@ Abweichungen unter [Befunde](#befunde) notieren.
 
 ---
 
+## Feature-Übersicht (Kurzfassung)
+
+Pro Feature ein Schnelltest. Die ausführlichen Fälle stehen im verlinkten Abschnitt.
+
+### Phase 0 – Repository Baseline → [§2](#2-phase-0--repository-baseline)
+- [ ] **Gradle-Build + CI** – `./gradlew clean build` → `BUILD SUCCESSFUL`, 52 Tests grün.
+- [ ] **Keine Secrets im Repo** – `.env`, `config.yml`, `data/` tauchen in `git status` nicht auf.
+
+### Phase 1 – Bot Core → [§3](#3-phase-1--bot-core)
+- [ ] **Startup-Validierung** – `guild.id: 0` → Start bricht ab und nennt den Schlüssel.
+- [ ] **Secrets aus Env** – ohne `DISCORD_TOKEN` → `Missing required environment variable`.
+- [ ] **Guild-Commands** – Log `Registered 9 commands`, alle sofort in Discord sichtbar.
+- [ ] **`/help`, `/status`** – beide ephemer, `/status` zeigt Laufzeit und Gateway-Ping.
+- [ ] **Permission Layer** – Nicht-Staff `/roles allow` → `Dir fehlen die Rechte …`.
+- [ ] **Kontrollierter Shutdown** – `Strg+C` → `Lumen wird beendet` in `#bot-log`, Prozess weg in ≤ 10 s.
+
+### Phase 2 – Storage / SQLite → [§4](#4-phase-2--storage--sqlite)
+- [ ] **Auto-Init + Migration** – `rm -rf data/`, starten → `Applied schema migration 1`.
+- [ ] **Schema** – `sqlite3 data/lumen.db ".tables"` zeigt alle 6 Tabellen, `journal_mode` = `wal`.
+- [ ] **Downgrade-Schutz** – `PRAGMA user_version = 99` → Start bricht ab.
+
+### Phase 3 – Notification Layer → [§5](#5-phase-3--notification-layer)
+- [ ] **Typisierte Embeds pro Channel** – Start → `🛠️ Lumen gestartet` in `#bot-log`.
+- [ ] **Fehlertoleranz** – `channels.bot-log: 0` oder fehlendes Schreibrecht → nur Log-Warnung, kein Crash.
+
+### Phase 4 – Self Roles → [§6](#6-phase-4--self-roles)
+- [ ] **Freigabe** – Staff `/roles allow role:Test-Farbe label:Farbe`, `/roles list` zeigt `aktiv`.
+- [ ] **Auswahl** – Mitglied `/roles pick` → Rolle an/abwählen, eigene Rollen vorausgewählt.
+- [ ] **Panel** – `/roles panel create`, funktioniert auch nach Neustart.
+- [ ] **Sicherheitsregeln** – Admin-Rolle, `@everyone`, Staff, Rollen über dem Bot → abgelehnt.
+- [ ] **Nachträgliche Rechteerhöhung** – freigegebener Rolle `Administrator` geben → verschwindet aus `/roles pick`.
+- [ ] **Deaktivieren** – `/roles deny` → Inhaber behalten die Rolle, Liste zeigt `deaktiviert`.
+
+### Phase 5 – Ticket System → [§7](#7-phase-5--ticket-system)
+- [ ] **Panel + Eröffnung** – `/ticket panel create`, Klick `Support` → privater `ticket-0001`.
+- [ ] **Sichtbarkeit** – Dritter Account sieht den Channel nicht.
+- [ ] **Claim** – Staff `Übernehmen`, zweiter Staff wird abgewiesen, Claim überlebt Neustart.
+- [ ] **Teilnehmer** – `/ticket add` / `/ticket remove`, Ersteller nicht entfernbar.
+- [ ] **Schließen + Transcript** – `Schließen` → Channel gesperrt, `.txt` in `#bot-log`, nach 30 s gelöscht.
+- [ ] **Ein Ticket pro Person** – zweiter `Support`-Klick → Verweis aufs offene Ticket.
+- [ ] **Transcript-Inhalt** – Nachrichten des Zweitaccounts stehen mit Text im `.txt` (Intent `MESSAGE_CONTENT`).
+
+### Phase 6 – Moderation Basics → [§8](#8-phase-6--moderation-basics)
+- [ ] **`/warn` + `/warnings`** – Verwarnung #1, #2, Liste neueste zuerst, überlebt Neustart.
+- [ ] **`/timeout`** – `minuten:2` → sichtbarer Timeout, Grenzen 1–40320.
+- [ ] **`/kick`, `/ban`** – funktionieren, `/ban` auch per ID ohne Mitgliedschaft.
+- [ ] **Guards** – Selbst, Bot, höhere Rolle, fehlendes Botrecht → klare Ablehnung.
+- [ ] **Audit-Trail** – jede erfolgreiche Aktion genau einmal in `#bot-log`, Ablehnungen nie.
+
+### Querschnitt → [§9](#9-querschnitt)
+- [ ] **Error Handler** – `chmod 000 data/lumen.db` → Nutzer bekommt Fehlermeldung, Bot läuft weiter.
+- [ ] **Neustart-Gesamttest** – Self Role, geclaimtes Ticket und Verwarnungen überstehen Neustart.
+
+---
+
 ## 0. Vorbereitung
 
 ### 0.1 Test-Guild einrichten
@@ -27,7 +82,10 @@ Abweichungen unter [Befunde](#befunde) notieren.
 
 - [ ] Bot mit diesen Rechten einladen: `Manage Roles`, `Manage Channels`,
       `Kick Members`, `Ban Members`, `Moderate Members`, `View Channels`,
-      `Send Messages`, `Attach Files`, `Read Message History`, `Manage Permissions`.
+      `Send Messages`, `Attach Files`, `Read Message History`.
+      `Manage Permissions` gibt es im Einladungslink nicht als eigenes Recht, es ist
+      dasselbe Bit wie `Manage Roles`. In der Kategorie `Tickets` heißt es
+      „Berechtigungen verwalten“ und darf dort nicht verweigert sein.
 - [ ] Bot-Rolle in der Rollenhierarchie **über** `Test-Farbe` und `Staff` ziehen,
       aber **unter** `Über-Bot` lassen.
 
