@@ -29,7 +29,8 @@ Diese Regeln gelten für die gesamte Umsetzung und haben Vorrang vor persönlich
 - Keine Multi-Guild-/SaaS-Architektur vorbereiten.
 - Keine Microservices einführen.
 - Keine externe Message Queue einführen.
-- Keine Weboberfläche bauen, solange sie nicht explizit später angefordert wird.
+- Web UI bleibt bewusst schmal: ein Staff-Werkzeug, keine zweite Produktoberfläche.
+- Keine eigene Benutzerverwaltung im Web UI; Autorisierung läuft immer über Discord-Rollen.
 - Keine Minecraft-Gameplay-Logik in den Discord-Bot verschieben.
 - Lumen spiegelt Kingdoms-Zustände; das Kingdoms-System bleibt Source of Truth für Gameplay und Matchzustände.
 
@@ -92,7 +93,8 @@ Der MVP soll insbesondere ermöglichen:
 - Kingdoms-Matchzustände und Ergebnisse in Discord zu spiegeln,
 - Match-Erinnerungen zu senden,
 - Minecraft-/Service-Ausfälle zu melden,
-- technische und administrative Bot-Logs zentral zu sammeln.
+- technische und administrative Bot-Logs zentral zu sammeln,
+- Konfiguration und Botzustand über ein schmales Web UI mit Discord-Login zu pflegen.
 
 Der MVP ist **keine vollständige Ablösung aller vorhandenen Drittanbieter-Bots**. Die Ablösung erfolgt Modul für Modul erst dann, wenn das jeweilige Lumen-Modul im echten Betrieb stabil funktioniert.
 
@@ -110,7 +112,7 @@ Folgendes wird bewusst **nicht** in Version 1 gebaut:
 - Economy,
 - Level-/XP-System,
 - Giveaways,
-- komplexes Web-Dashboard,
+- umfangreiches Web-Dashboard mit eigener Produktoberfläche,
 - Website-Accounts,
 - Workflow-Builder,
 - Multi-Guild-/SaaS-Unterstützung,
@@ -119,6 +121,8 @@ Folgendes wird bewusst **nicht** in Version 1 gebaut:
 - direkte Minecraft-Konsole über Discord,
 - Redis nur „für später“,
 - Message Broker nur „für später“.
+
+Ein schmales Web UI für Staff ist dagegen Teil des MVP und in Abschnitt 9 beschrieben.
 
 Wenn eine dieser Funktionen während der Umsetzung praktisch erscheint, kommt sie in den Post-MVP-Backlog statt in den aktuellen Scope.
 
@@ -133,6 +137,7 @@ Java 25
 JDA
 Gradle Kotlin DSL
 SQLite
+React + TypeScript + Vite (Web UI)
 ```
 
 ### 3.1 Grundprinzipien
@@ -145,6 +150,8 @@ SQLite
 - Klare Modulgrenzen innerhalb desselben Projekts.
 - Externe Systeme über kleine, klar definierte Interfaces anbinden.
 - Strukturierte Logs über stdout/stderr; optional ergänzend Rolling File Logs.
+- Web UI wird als statisches Bundle im Bot-Artefakt ausgeliefert; ein deploybares Artefakt bleibt bestehen.
+- Node ist reine Buildzeit-Abhängigkeit, kein Bestandteil des Produktionsbetriebs.
 
 ### 3.2 Zielmodule
 
@@ -159,7 +166,8 @@ Lumen
 ├── monitoring
 ├── notifications
 ├── moderation
-└── storage
+├── storage
+└── web
 ```
 
 Diese Modulnamen sind fachliche Grenzen. Sie müssen nicht zwingend als separate Gradle-Subprojects umgesetzt werden. Für das MVP ist ein einzelnes Gradle-Projekt mit sauberen Packages ausreichend.
@@ -291,6 +299,18 @@ MVP-Befehle:
 
 Jede Aktion wird geloggt.
 
+### 4.11 `web`
+
+Verantwortlich für:
+
+- Auslieferung des statischen Web-UI-Bundles,
+- Discord OAuth2 Login,
+- Sessions und Autorisierung gegen Discord-Rollen,
+- lesende und schreibende Config-Endpoints,
+- Statusdaten für die Oberfläche.
+
+Teilt sich den HTTP-Server mit der Internal Event API, bleibt aber pfad- und authentifizierungsseitig davon getrennt.
+
 ---
 
 ## 5. Konfiguration und Secrets
@@ -319,6 +339,12 @@ roles:
   east: 4
   south: 5
   west: 6
+
+web:
+  enabled: true
+  bind: 127.0.0.1
+  port: 8080
+  base-url: "https://lumen.example.net"
 ```
 
 IDs niemals direkt in Event Handlern oder Commands hardcoden.
@@ -328,6 +354,7 @@ IDs niemals direkt in Event Handlern oder Commands hardcoden.
 Nicht in Git:
 
 - Discord Token,
+- Discord OAuth2 Client Secret,
 - internes API-Secret,
 - DB-Secrets bei späterer externer DB,
 - Monitoring-Secrets,
@@ -339,10 +366,14 @@ Empfohlene Variablen:
 
 ```text
 DISCORD_TOKEN
+DISCORD_CLIENT_ID
+DISCORD_CLIENT_SECRET
 LUMEN_INTERNAL_API_SECRET
 LUMEN_CONFIG_PATH
 LUMEN_DATABASE_PATH
 ```
+
+`DISCORD_CLIENT_ID` und `DISCORD_CLIENT_SECRET` stammen aus der Discord-Anwendung und werden für den OAuth2-Login des Web UI benötigt. Das Client Secret wird ausschließlich serverseitig verwendet und nie an das Frontend ausgeliefert.
 
 ---
 
@@ -550,7 +581,107 @@ Buttons sind für den normalen Ticketflow vorzuziehen.
 
 ---
 
-# 9. Implementierungsphasen
+## 9. Web UI
+
+Das MVP enthält ein bewusst schmales Web UI für Staff. Es ersetzt keine Discord-Funktion, sondern übernimmt genau die Aufgaben, die in Discord umständlich sind: Konfiguration pflegen und Botzustand einsehen.
+
+### 9.1 Scope
+
+Im MVP enthalten:
+
+- Login über Discord OAuth2,
+- Statusseite mit Health, Uptime, Gateway-Latenz und Monitoring-Zustand,
+- Config-Editor für Guild-, Channel- und Rollen-IDs mit Auswahllisten aus der Guild,
+- Anzeige der letzten Audit-Log-Einträge.
+
+Nicht enthalten:
+
+- eigene Benutzerverwaltung,
+- Moderationsaktionen,
+- Ticketbearbeitung,
+- öffentlich erreichbare Seiten ohne Login,
+- Multi-Guild-Ansichten.
+
+Grundsatz: Was ein Staffmitglied in Discord genauso schnell erledigt, bleibt in Discord.
+
+### 9.2 Technik
+
+```text
+React + TypeScript
+Vite
+kein UI-Framework, kein Router, kein State-Management-Paket
+```
+
+- Das Frontend wird zu statischen Dateien gebaut und im Bot-Artefakt ausgeliefert.
+- Der Gradle-Build erzeugt das Bundle und legt es in die Bot-Ressourcen; `./gradlew build` bleibt der einzige Buildbefehl.
+- Node wird nur zur Buildzeit benötigt, nicht im Betrieb.
+- Ausgeliefert wird vom selben HTTP-Server wie die Internal Event API (Abschnitt 7), unter getrennten Pfaden.
+- Wenige Seiten, wenige Komponenten, kein Design-System. Verständlichkeit vor Optik.
+
+### 9.3 Routen
+
+```text
+GET  /                      Web UI (statisches Bundle)
+GET  /auth/login            Redirect zu Discord
+GET  /auth/callback         Code-Tausch, Session anlegen
+POST /auth/logout           Session verwerfen
+GET  /api/session           aktueller Benutzer oder 401
+GET  /api/status            Health-Daten
+GET  /api/config            aktuelle Config
+PUT  /api/config            Config schreiben
+GET  /api/guild/channels    Auswahlliste für den Config-Editor
+GET  /api/guild/roles       Auswahlliste für den Config-Editor
+GET  /api/audit             letzte Audit-Log-Einträge
+```
+
+`/internal/...` bleibt davon getrennt und behält seine Bearer-Authentifizierung. Die beiden Pfadbäume teilen sich keinen Auth-Mechanismus.
+
+### 9.4 Login über Discord
+
+Authorization Code Flow:
+
+1. `/auth/login` erzeugt einen zufälligen `state`, legt ihn kurzlebig ab und leitet zu Discord weiter.
+2. Discord ruft `/auth/callback` mit `code` und `state` auf.
+3. `state` wird geprüft und verbraucht; fehlender, unbekannter, abgelaufener oder bereits benutzter `state` führt zum Abbruch.
+4. Der `code` wird serverseitig gegen ein Access Token getauscht, daraus wird die Discord-User-ID gelesen.
+5. Das Access Token wird nach diesem Schritt verworfen und nicht gespeichert.
+
+Scope: nur `identify`.
+
+Die Rollenprüfung läuft nicht über OAuth-Scopes, sondern über JDA: Der Bot kennt die konfigurierte Guild bereits und prüft dort Mitgliedschaft und Staffrolle. Das spart den Scope `guilds.members.read` und hält Discord als einzige Quelle der Berechtigung.
+
+### 9.5 Session und Autorisierung
+
+- Session-ID: kryptografisch zufällig, mindestens 256 Bit.
+- Serverseitige Sessionablage im Speicher mit Ablaufzeit. Nach einem Neustart ist ein erneuter Login nötig; für ein Staff-Werkzeug ist das akzeptabel und spart Session-Persistenz und Token-Signaturen.
+- Cookie: `HttpOnly`, `Secure`, `SameSite=Strict`, `Path=/`.
+- Jeder Request auf `/api/...` prüft gültige Session, Mitgliedschaft in der konfigurierten Guild und Staffrolle.
+- Die Rollenprüfung liest den Live-Zustand aus JDA, nicht den Zustand zum Loginzeitpunkt. Ein Rollenentzug wirkt damit sofort.
+- Fehlende Session ergibt `401`, fehlende Rolle ergibt `403`.
+- Logout löscht die Session serverseitig, nicht nur das Cookie.
+
+CSRF: `SameSite=Strict` plus schreibende Requests ausschließlich als `POST`/`PUT` mit `Content-Type: application/json`. Kein Formular-Submit, damit kein zusätzlicher Token-Layer.
+
+### 9.6 Config schreiben
+
+- Jede ID wird gegen die Guild validiert, bevor sie gespeichert wird.
+- `config.yml` wird atomar ersetzt: temporäre Datei schreiben, dann verschieben.
+- Nach erfolgreichem Schreiben lädt der Bot die Config neu, ohne Neustart.
+- Jede Änderung landet im Audit Log mit Discord-User-ID, Feld, altem und neuem Wert.
+- Secrets werden über das Web UI weder gelesen noch geschrieben.
+- Schlägt die Validierung fehl, bleibt die bestehende Config unverändert.
+
+### 9.7 Betrieb
+
+- Der HTTP-Server bindet standardmäßig auf `127.0.0.1` und läuft hinter einem Reverse Proxy mit TLS.
+- Ohne TLS kein produktiver Betrieb: Das Session-Cookie ist `Secure`.
+- Die Redirect-URI muss in der Discord-Anwendung exakt hinterlegt sein.
+- Rate Limit auf `/auth/...`, damit der Login nicht als Türklopfer taugt.
+- Ist `web.enabled` auf `false`, startet der Bot ohne Web UI und ohne OAuth-Konfiguration.
+
+---
+
+# 10. Implementierungsphasen
 
 Die Phasen werden in dieser Reihenfolge umgesetzt. Innerhalb einer Phase darf die genaue Commit-Aufteilung an den Repository-Stand angepasst werden.
 
@@ -1049,7 +1180,58 @@ Mindestens loggen:
 
 ---
 
-## Phase 15 – Production Hardening
+## Phase 15 – Web UI
+
+### Ziel
+
+Schmale Weboberfläche für Staff: Konfiguration pflegen und Botzustand einsehen, ohne Discord-Funktionen zu duplizieren.
+
+### Aufgaben
+
+- [ ] Vite-/React-/TypeScript-Setup unter `web/` anlegen.
+- [ ] Frontend-Build in den Gradle-Build einhängen, Bundle in die Bot-Ressourcen legen.
+- [ ] statische Auslieferung über den bestehenden HTTP-Server.
+- [ ] OAuth2 Authorization Code Flow implementieren.
+- [ ] `state` erzeugen, prüfen und verbrauchen.
+- [ ] Session-Store mit Ablaufzeit implementieren.
+- [ ] Session-Cookie mit `HttpOnly`, `Secure`, `SameSite=Strict` setzen.
+- [ ] Autorisierung über Guild-Mitgliedschaft und Staffrolle aus JDA.
+- [ ] Logout serverseitig implementieren.
+- [ ] Rate Limit auf die Auth-Routen.
+- [ ] Status-Endpoint aus dem Health State.
+- [ ] Config-Endpoints mit Validierung jeder ID gegen die Guild.
+- [ ] atomares Schreiben der `config.yml` plus Reload ohne Neustart.
+- [ ] Channel- und Rollenlisten als Auswahlhilfen bereitstellen.
+- [ ] Config-Änderungen im Audit Log erfassen.
+- [ ] Statusseite, Config-Formular und Audit-Ansicht im Frontend.
+- [ ] 401-, 403- und Fehlerzustände im Frontend sichtbar machen.
+- [ ] Setup, Redirect-URI und Reverse-Proxy-Betrieb dokumentieren.
+
+### Akzeptanzkriterien
+
+- Ohne gültige Session liefert jeder `/api/`-Endpoint `401`.
+- Ein eingeloggter Nutzer ohne Staffrolle erhält `403`.
+- Ein Rollenentzug wirkt ohne Neustart und ohne erneuten Login.
+- Callback mit fehlendem, fremdem, abgelaufenem oder bereits benutztem `state` wird abgelehnt.
+- Client Secret und Access Token erscheinen weder im Log noch im Frontend-Bundle.
+- Eine über das Web UI geänderte ID wirkt ohne Neustart.
+- Ungültige IDs werden abgelehnt, die bestehende Config bleibt unverändert.
+- `./gradlew build` erzeugt Bot und Web UI in einem Artefakt.
+- Bei `web.enabled: false` startet der Bot unverändert ohne Web UI.
+
+### Mögliche Commits
+
+```text
+add web module
+add discord oauth login
+add session handling
+add config api
+add web ui pages
+```
+
+---
+
+## Phase 16 – Production Hardening
 
 ### Aufgaben
 
@@ -1067,20 +1249,24 @@ Mindestens loggen:
 - [ ] Dependency-Versionen pinnen.
 - [ ] CI Build/Test aktivieren.
 - [ ] Deployment-Dokumentation erstellen.
+- [ ] Web UI nur über TLS erreichbar machen.
+- [ ] Bind-Adresse des HTTP-Servers prüfen.
+- [ ] Redirect-URI in der Discord-Anwendung auf die produktive Domain begrenzen.
 
 ### Akzeptanzkriterien
 
 - Bot übersteht kontrollierten Restart ohne Verlust kritischer Zustände.
 - temporäre Discord API Fehler führen nicht zu Prozessabbruch.
 - interne API ist nicht öffentlich ungeschützt erreichbar.
+- Web UI ist ohne Login und ohne Staffrolle nicht nutzbar.
 - produktive Secrets liegen außerhalb des Repos.
 - DB kann gesichert und wiederhergestellt werden.
 
 ---
 
-# 10. Teststrategie
+# 11. Teststrategie
 
-## 10.1 Unit Tests
+## 11.1 Unit Tests
 
 Priorität auf Logik, die ohne Discord-Netzwerk getestet werden kann:
 
@@ -1092,9 +1278,12 @@ Priorität auf Logik, die ohne Discord-Netzwerk getestet werden kann:
 - Deduplication,
 - Reminder Scheduling,
 - Event Validation,
-- Config Validation.
+- Config Validation,
+- OAuth State Lifecycle,
+- Session Expiry,
+- Web Authorization Decisions.
 
-## 10.2 Integration Tests
+## 11.2 Integration Tests
 
 Mindestens:
 
@@ -1103,9 +1292,11 @@ Mindestens:
 - API Authentication,
 - API Payload Validation,
 - Event Dispatch,
+- OAuth Callback Ablehnungen,
+- Config Read/Write Roundtrip über das Web API,
 - Restart-relevante persistente Zustände.
 
-## 10.3 Manueller Discord-Test
+## 11.3 Manueller Discord-Test
 
 Eigene Test-Guild verwenden.
 
@@ -1118,6 +1309,7 @@ Testfälle:
 - Ticket Create/Claim/Add/Remove/Close,
 - Warn/Timeout/Kick/Ban soweit sicher testbar,
 - Minecraft Status online/offline,
+- Web-Login, Zugriff ohne Staffrolle, Rollenentzug bei offener Session,
 - Linking Erfolg/Timeout/Doppelverwendung,
 - Kingdom Role Sync,
 - Match Event Posts,
@@ -1126,7 +1318,7 @@ Testfälle:
 
 ---
 
-# 11. Security Checkliste
+# 12. Security Checkliste
 
 Vor MVP-Abnahme prüfen:
 
@@ -1144,19 +1336,28 @@ Vor MVP-Abnahme prüfen:
 - [ ] öffentliche Minecraft-Control-Kommandos existieren nicht.
 - [ ] SQL-Zugriffe sind parametrisiert.
 - [ ] keine ungeprüften User Strings in Dateipfade übernehmen.
+- [ ] OAuth Client Secret nicht im Repo und nicht im Frontend-Bundle.
+- [ ] `state` wird geprüft und nur einmal verwendet.
+- [ ] Session-Cookie ist `HttpOnly`, `Secure` und `SameSite=Strict`.
+- [ ] Web-Endpoints prüfen Guild-Mitgliedschaft und Staffrolle bei jedem Request.
+- [ ] Web UI ist nur über TLS erreichbar.
+- [ ] Config-Schreibzugriffe validieren jede ID gegen die Guild.
 
 ---
 
-# 12. CI
+# 13. CI
 
 Mindestens bei Push/PR:
 
 ```text
 checkout
 → setup Java 25
+→ setup Node
 → ./gradlew clean build
 → tests
 ```
+
+Der Frontend-Build hängt am Gradle-Build, deshalb braucht CI zusätzlich eine Node-Installation.
 
 Optional zusätzlich:
 
@@ -1168,7 +1369,7 @@ Kein automatisches Production-Deployment allein aufgrund eines Commits.
 
 ---
 
-# 13. Deployment-Zielbild
+# 14. Deployment-Zielbild
 
 Der genaue Illunium-Infrastruktur-Stack wird separat festgelegt. Lumen soll jedoch so gebaut werden, dass es später als normaler langlebiger Service betrieben werden kann.
 
@@ -1180,13 +1381,15 @@ Mindestens:
 - persistenter SQLite-Pfad,
 - stdout/stderr Logs,
 - kontrollierter Shutdown,
-- Health-Zustand.
+- Health-Zustand,
+- Reverse Proxy mit TLS vor dem Web UI,
+- Node nur im Buildschritt, nicht auf dem Zielsystem.
 
 Deployment darf später beispielsweise über systemd oder Container-Orchestrierung erfolgen. Das Repo soll keine unnötige harte Bindung an eine bestimmte Produktionsplattform erhalten.
 
 ---
 
-# 14. MVP Definition of Done
+# 15. MVP Definition of Done
 
 Lumen MVP ist fertig, wenn alle folgenden Punkte erfüllt sind:
 
@@ -1208,6 +1411,8 @@ Lumen MVP ist fertig, wenn alle folgenden Punkte erfüllt sind:
 - [ ] Staff-Logs existieren.
 - [ ] Bot stellt nach Restart relevante Zustände wieder her.
 - [ ] interne API ist authentifiziert und validiert.
+- [ ] Web UI erlaubt Login nur über Discord und nur für Staff.
+- [ ] Config kann über das Web UI gepflegt werden und wirkt ohne Neustart.
 - [ ] keine Secrets befinden sich im Git-Repository.
 - [ ] Build und Tests laufen in CI.
 - [ ] ein frischer Checkout kann anhand der Dokumentation lokal gestartet werden.
@@ -1216,7 +1421,7 @@ Nicht für MVP erforderlich:
 
 - vollständiger Carl-bot-Ersatz,
 - komplexes AutoMod,
-- Webdashboard,
+- Web-Dashboard über den Umfang aus Abschnitt 9 hinaus,
 - Musik,
 - Economy,
 - Minecraft Console Control,
@@ -1224,7 +1429,7 @@ Nicht für MVP erforderlich:
 
 ---
 
-# 15. Empfohlene Ablösung externer Bots
+# 16. Empfohlene Ablösung externer Bots
 
 Externe Bots werden **nicht nach Kalender**, sondern nach Funktionsreife entfernt.
 
@@ -1250,7 +1455,7 @@ Grundsatz:
 
 ---
 
-# 16. Post-MVP Backlog
+# 17. Post-MVP Backlog
 
 Erst nach stabilem MVP bewerten:
 
@@ -1260,14 +1465,15 @@ Erst nach stabilem MVP bewerten:
 4. Logging und Audit-Funktionen erweitern.
 5. Monitoring für alle Illunium-Services zentralisieren.
 6. sichere administrative Minecraft-Funktionen integrieren.
-7. Website/API anbinden.
-8. verbleibende externe Bots Modul für Modul entfernen.
-9. SQLite nur bei echtem Bedarf auf PostgreSQL migrieren.
-10. Message Broker nur bei echtem Integrationsbedarf evaluieren.
+7. Web UI über Konfiguration und Status hinaus ausbauen.
+8. Website/API anbinden.
+9. verbleibende externe Bots Modul für Modul entfernen.
+10. SQLite nur bei echtem Bedarf auf PostgreSQL migrieren.
+11. Message Broker nur bei echtem Integrationsbedarf evaluieren.
 
 ---
 
-# 17. Agenten-Checkliste pro Arbeitsschritt
+# 18. Agenten-Checkliste pro Arbeitsschritt
 
 Vor Änderung:
 
@@ -1297,7 +1503,7 @@ Vor Commit:
 
 ---
 
-# 18. Prioritätsregel bei Zeitdruck
+# 19. Prioritätsregel bei Zeitdruck
 
 Wenn Zeit oder Komplexität aus dem Ruder läuft, gilt folgende Reihenfolge:
 
@@ -1319,7 +1525,7 @@ Ein einfaches funktionierendes Command-/Button-System ist besser als eine große
 
 ---
 
-# 19. Abschlusskriterium für den KI-Agenten
+# 20. Abschlusskriterium für den KI-Agenten
 
 Der Agent soll eine Phase erst als abgeschlossen betrachten, wenn:
 

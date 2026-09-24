@@ -32,6 +32,7 @@ minecraft      server status
 kingdoms       kingdom role sync, match mirroring
 monitoring     outage detection and reporting
 moderation     warn, timeout, kick, ban
+web            static UI bundle, Discord OAuth login, config API
 ```
 
 Kingdoms stays the source of truth for gameplay state; Lumen only mirrors it.

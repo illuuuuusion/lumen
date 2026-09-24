@@ -24,6 +24,7 @@ Der MVP ist erfolgreich, wenn Illunium damit:
 - Minecraft-Accounts mit Discord-Accounts verknüpfen kann
 - Kingdom-Rollen automatisch synchronisieren kann
 - administrative Logs zentral sammeln kann
+- Konfiguration und Botzustand über ein schmales Web UI mit Discord-Login pflegen kann
 
 ---
 
@@ -37,13 +38,15 @@ Noch nicht erforderlich:
 - Economy
 - Level-/XP-System
 - Giveaways
-- komplexe Web-Dashboards
+- umfangreiche Web-Dashboards über den Umfang aus Abschnitt 12 hinaus
 - vollständige Website-Accounts
 - KI-Moderation
 - vollautomatisches Minecraft-Server-Management
 - Start/Stop/Restart des Servers aus öffentlichen Discord-Commands
 - komplexer Workflow-Builder
 - Multi-Guild-/SaaS-Unterstützung
+
+Ein schmales Web UI für Staff gehört dagegen zum MVP und ist in Abschnitt 12 beschrieben.
 
 Der Bot wird zunächst ausschließlich für den eigenen Illunium-Discord entwickelt.
 
@@ -58,6 +61,7 @@ Java 25
 JDA
 Gradle Kotlin DSL
 SQLite für MVP
+React + TypeScript + Vite für das Web UI
 ```
 
 Begründung:
@@ -65,7 +69,7 @@ Begründung:
 - gleicher JVM-/Gradle-Stack wie das Kingdoms-Plugin
 - gemeinsame Entwicklungsumgebung
 - gemeinsame DTOs/Utilities theoretisch später möglich
-- kein zusätzlicher Node-/Python-Produktionsstack notwendig
+- kein zusätzlicher Produktionsstack notwendig: Node läuft nur im Build, ausgeliefert wird ein statisches Bundle im Bot-Artefakt
 
 Eine spätere Migration von SQLite auf PostgreSQL bleibt möglich, wenn mehrere Botinstanzen oder größere Datenmengen entstehen.
 
@@ -86,7 +90,8 @@ Lumen
 ├── monitoring
 ├── notifications
 ├── moderation
-└── storage
+├── storage
+└── web
 ```
 
 Nicht jedes Modul muss im MVP vollständig ausgebaut sein.
@@ -132,6 +137,12 @@ roles:
   east: 4
   south: 5
   west: 6
+
+web:
+  enabled: true
+  bind: 127.0.0.1
+  port: 8080
+  base-url: "https://lumen.example.net"
 ```
 
 Keine Discord-IDs hardcoden.
@@ -470,7 +481,80 @@ Später kann die Verbindung durch mTLS oder einen Message Broker ersetzt werden,
 
 ---
 
-## 12. Monitoring-Modul
+## 12. Web UI
+
+Ein bewusst schmales Web UI für Staff. Es ersetzt keine Discord-Funktion, sondern übernimmt die Aufgaben, die in Discord umständlich sind: Konfiguration pflegen und Botzustand einsehen.
+
+### Umfang
+
+Enthalten:
+
+- Login über Discord
+- Statusseite: Health, Uptime, Gateway-Latenz, Monitoring-Zustand
+- Config-Editor für Guild-, Channel- und Rollen-IDs, mit Auswahllisten statt getippter Snowflakes
+- letzte Audit-Log-Einträge
+
+Nicht enthalten:
+
+- eigene Benutzerverwaltung
+- Moderationsaktionen
+- Ticketbearbeitung
+- öffentliche Seiten ohne Login
+- Multi-Guild-Ansichten
+
+Grundsatz: Was in Discord genauso schnell geht, bleibt in Discord.
+
+### Technik
+
+```text
+React + TypeScript
+Vite
+kein UI-Framework, kein Router, kein State-Management-Paket
+```
+
+Das Frontend wird zu statischen Dateien gebaut und im Bot-Artefakt ausgeliefert. Der Gradle-Build erzeugt das Bundle, `./gradlew build` bleibt der einzige Buildbefehl. Node wird nur zur Buildzeit gebraucht.
+
+Ausgeliefert wird vom selben HTTP-Server wie die Internal Event API (Abschnitt 11), unter getrennten Pfaden und mit getrennter Authentifizierung.
+
+Optik ist zweitrangig. Wenige Seiten, wenige Komponenten, lesbar auf Anhieb.
+
+### Login
+
+Discord OAuth2 Authorization Code Flow:
+
+```text
+/auth/login     zufälliger state, Redirect zu Discord
+/auth/callback  state prüfen und verbrauchen, Code gegen Token tauschen, User-ID lesen
+/auth/logout    Session serverseitig löschen
+```
+
+Scope: nur `identify`. Das Access Token wird nach dem Callback verworfen.
+
+Die Berechtigung kommt nicht aus OAuth-Scopes, sondern aus Discord selbst: Der Bot kennt die Guild bereits und prüft dort Mitgliedschaft und Staffrolle über JDA. Damit bleibt Discord die einzige Quelle der Berechtigung, und ein Rollenentzug wirkt sofort, ohne Logout.
+
+### Session
+
+- serverseitig im Speicher, mit Ablaufzeit
+- Session-ID kryptografisch zufällig
+- Cookie `HttpOnly`, `Secure`, `SameSite=Strict`
+- nach Botneustart ist ein erneuter Login nötig; für ein Staff-Werkzeug akzeptabel
+- keine Session ergibt `401`, fehlende Staffrolle ergibt `403`
+
+### Config schreiben
+
+- jede ID wird gegen die Guild validiert, bevor sie gespeichert wird
+- `config.yml` wird atomar ersetzt
+- der Bot lädt die Config danach ohne Neustart neu
+- jede Änderung landet im Audit Log mit User, Feld, altem und neuem Wert
+- Secrets werden über das Web UI weder gelesen noch geschrieben
+
+### Betrieb
+
+Der HTTP-Server bindet auf localhost und läuft hinter einem Reverse Proxy mit TLS. Ohne TLS kein produktiver Betrieb, das Session-Cookie ist `Secure`. Ist das Web UI in der Config deaktiviert, startet der Bot unverändert ohne OAuth-Konfiguration.
+
+---
+
+## 13. Monitoring-Modul
 
 Wichtig ist die Trennung zwischen Minecraft-Plugin und echter Ausfallerkennung.
 
@@ -514,7 +598,7 @@ Nur bei Zustandswechsel posten.
 
 ---
 
-## 13. Discord-Statusmeldungen
+## 14. Discord-Statusmeldungen
 
 Channel:
 
@@ -540,7 +624,7 @@ Bei Matchbetrieb kann zusätzlich Staff-only gewarnt werden, damit ein Ausfall n
 
 ---
 
-## 14. Notifications
+## 15. Notifications
 
 Zentrale Notification-Schicht statt in jedem Modul eigene Discord-Sendelogik.
 
@@ -559,7 +643,7 @@ Das ermöglicht später einheitliche Embeds und Channel-Routing.
 
 ---
 
-## 15. Moderation – MVP
+## 16. Moderation – MVP
 
 Keine vollständige Carl-bot-Nachbildung.
 
@@ -585,7 +669,7 @@ Discords eigene AutoMod-Funktionen können vorerst parallel genutzt werden.
 
 ---
 
-## 16. Logging
+## 17. Logging
 
 Bot loggt mindestens:
 
@@ -609,7 +693,7 @@ Technische Logs zusätzlich in Datei/stdout für Container-/Service-Logs.
 
 ---
 
-## 17. Datenhaltung
+## 18. Datenhaltung
 
 MVP:
 
@@ -637,13 +721,14 @@ Source of Truth für Gameplay bleibt das Kingdoms-System.
 
 ---
 
-## 18. Security
+## 19. Security
 
 ### Secrets
 
 Nicht in Git:
 
 - Discord Token
+- Discord OAuth2 Client Secret
 - internal API secret
 - DB secrets
 - Monitoring secrets
@@ -664,6 +749,16 @@ Nicht pauschal Administrator geben, wenn vermeidbar.
 - Request Size Limit
 - Rate Limit
 
+### Web UI
+
+- Login ausschließlich über Discord OAuth2, Scope `identify`
+- Autorisierung über Guild-Mitgliedschaft und Staffrolle, bei jedem Request neu geprüft
+- `state`-Parameter gegen CSRF im Loginflow, einmalig verwendbar
+- Session serverseitig, Cookie `HttpOnly`, `Secure`, `SameSite=Strict`
+- kein Access Token und kein Client Secret im Frontend
+- nur über TLS erreichbar, Bot bindet auf localhost hinter einem Reverse Proxy
+- Rate Limit auf die Auth-Routen
+
 ### Minecraft Server Control
 
 Start/Stop/Console-Kommandos über Discord sind **nicht Teil des MVP**.
@@ -672,7 +767,7 @@ Das vermeidet einen unnötig mächtigen Angriffsweg.
 
 ---
 
-## 19. Slash Commands – MVP
+## 20. Slash Commands – MVP
 
 ### Allgemein
 
@@ -735,7 +830,7 @@ Buttons sind für den normalen Ticketflow vorzuziehen.
 
 ---
 
-## 20. MVP-Reihenfolge
+## 21. MVP-Reihenfolge
 
 ### Phase 1 – Bot Core
 
@@ -784,9 +879,17 @@ Buttons sind für den normalen Ticketflow vorzuziehen.
 3. Discord alerting
 4. Deduplication
 
+### Phase 7 – Web UI
+
+1. React-Bundle im Gradle-Build
+2. Discord OAuth2 Login
+3. Session und Rollenprüfung
+4. Statusseite
+5. Config-Editor mit Reload
+
 ---
 
-## 21. Definition of Done
+## 22. Definition of Done
 
 Das Discord-Bot-MVP ist einsatzbereit, wenn:
 
@@ -798,6 +901,8 @@ Das Discord-Bot-MVP ist einsatzbereit, wenn:
 - Tickets erstellt/geschlossen werden können
 - Minecraft-Status abrufbar ist
 - Minecraft ↔ Discord Linking funktioniert
+- Web UI ist nur für eingeloggte Staffmitglieder nutzbar
+- Config kann über das Web UI gepflegt werden und wirkt ohne Neustart
 - Kingdom-Rollen automatisch synchronisiert werden können
 - Kingdoms Match Events im richtigen Channel erscheinen
 - Matchreminder funktionieren
@@ -809,7 +914,7 @@ Nicht erforderlich für MVP:
 
 - vollständiger Carl-bot-Ersatz
 - komplexes AutoMod
-- Webdashboard
+- Webdashboard über den Umfang aus Abschnitt 12 hinaus
 - Musik
 - Economy
 - Minecraft-Console-Control
@@ -817,7 +922,7 @@ Nicht erforderlich für MVP:
 
 ---
 
-## 22. Unmittelbarer Nutzen für Kingdoms
+## 23. Unmittelbarer Nutzen für Kingdoms
 
 Mit diesem MVP kann der erste Kingdoms-Durchlauf bereits folgende Abläufe automatisieren:
 
@@ -850,7 +955,7 @@ Damit liefert der eigene Bot schon in Version 1 konkreten Mehrwert, ohne vor Kin
 
 ---
 
-## 23. Danach – Post-MVP
+## 24. Danach – Post-MVP
 
 Erst nach stabilem MVP schrittweise:
 
@@ -860,8 +965,9 @@ Erst nach stabilem MVP schrittweise:
 4. Logging erweitern
 5. MCStatus-/Monitoring-Funktionen für alle Server zentralisieren
 6. administrative Minecraft-Funktionen sicher integrieren
-7. Website/API anbinden
-8. verbleibende externe Discord-Bots Modul für Modul entfernen
+7. Web UI über Konfiguration und Status hinaus ausbauen
+8. Website/API anbinden
+9. verbleibende externe Discord-Bots Modul für Modul entfernen
 
 Grundsatz:
 
