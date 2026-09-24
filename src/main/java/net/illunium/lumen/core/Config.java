@@ -4,6 +4,8 @@ import java.io.IOException;
 import java.io.Reader;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 import java.util.OptionalLong;
 import org.yaml.snakeyaml.Yaml;
@@ -87,6 +89,26 @@ public final class Config {
 
     public long guildId() {
         return id("guild.id");
+    }
+
+    /**
+     * Fails startup if any of these IDs is missing or still the {@code 0} placeholder.
+     *
+     * <p>A {@code 0} parses fine and then silently misbehaves: a staff role of 0 matches no
+     * member, so every staff command is refused with a permission error that names no cause.
+     * Better to refuse to start and say which keys to fill in.
+     */
+    public void requireIds(String... paths) {
+        List<String> missing = new ArrayList<>();
+        for (String path : paths) {
+            if (findId(path).orElse(0L) == 0L) {
+                missing.add(path);
+            }
+        }
+        if (!missing.isEmpty()) {
+            throw new IllegalStateException("Fill in these IDs in " + source + ": "
+                    + String.join(", ", missing));
+        }
     }
 
     /** Required environment variable, used for secrets. Never logged. */

@@ -1,5 +1,6 @@
 package net.illunium.lumen.core;
 
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -63,6 +64,26 @@ class CoreTest {
         assertTrue(CommandRouter.isAllowed(true, List.of(7L, 42L), 42L));
         assertFalse(CommandRouter.isAllowed(true, List.of(7L), 42L));
         assertFalse(CommandRouter.isAllowed(true, List.of(), 42L));
+    }
+
+    @Test
+    void placeholderIdsFailStartupAndNameThemselves() {
+        Config config = Config.parse(new StringReader("""
+                guild:
+                  id: 1234567890
+                roles:
+                  staff: 0
+                """), "test.yml");
+
+        assertDoesNotThrow(() -> config.requireIds("guild.id"));
+
+        IllegalStateException e =
+                assertThrows(IllegalStateException.class, () -> config.requireIds("guild.id", "roles.staff"));
+        assertTrue(e.getMessage().contains("roles.staff"), e.getMessage());
+        assertFalse(e.getMessage().contains("guild.id"), "only the unfilled keys are named: " + e.getMessage());
+
+        assertThrows(IllegalStateException.class, () -> config.requireIds("channels.status"),
+                "an absent key counts as unfilled too");
     }
 
     @Test

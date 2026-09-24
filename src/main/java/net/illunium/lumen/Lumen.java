@@ -26,6 +26,9 @@ public final class Lumen {
 
     public static void main(String[] args) throws InterruptedException {
         Config config = Config.load();
+        // Channels are checked per notification and only log when unset; these two are not
+        // optional, because the whole permission layer hangs off roles.staff.
+        config.requireIds("guild.id", "roles.staff");
         String token = Config.requireEnv("DISCORD_TOKEN");
         Database database = Database.open();
 
