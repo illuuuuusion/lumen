@@ -300,11 +300,26 @@ Moderations-Guards, Embed-Kürzung.
 - [ ] **Fehlende Botrechte:** Bot `Kanäle verwalten` in der Kategorie entziehen →
       `Mir fehlen die Rechte, einen Ticket-Channel anzulegen.`
 
-> ⚠️ **Bekannter Vorbehalt Transcript:** Der Bot startet mit
-> `JDABuilder.createDefault`, also **ohne** den privilegierten Intent
-> `MESSAGE_CONTENT`. Im `.txt`-Transcript stehen daher Zeitstempel, Autoren und
-> Anhang-Links korrekt, die **Nachrichtentexte anderer Mitglieder bleiben aber
-> leer**. Siehe [Befunde](#befunde).
+### 7.7 Transcript-Inhalt
+
+Lumen fordert den privilegierten Intent `MESSAGE_CONTENT` an. Er muss im
+[Discord Developer Portal](https://discord.com/developers/applications) unter
+*Bot → Privileged Gateway Intents* aktiviert sein, sonst **startet der Bot nicht**.
+
+- [ ] **Fehlkonfiguration zuerst prüfen:** Intent im Portal kurz deaktivieren,
+      Bot starten → Start bricht mit einer Meldung über den fehlenden privilegierten
+      Intent ab (kein stiller Start mit leeren Transcripts). Danach wieder aktivieren.
+- [ ] Neues Ticket öffnen, darin **mit dem Zweitaccount** drei Nachrichten
+      schreiben, eine davon mit Datei-Anhang.
+- [ ] Ticket schließen.
+- [ ] `.txt` aus `#bot-log` öffnen und prüfen:
+  - [ ] Kopf: `ticket-000X (Support)`, `Ersteller: <ID>`, `Nachrichten: N`.
+  - [ ] Älteste Nachricht steht **oben** (Discord liefert neueste zuerst, das Transcript dreht um).
+  - [ ] Je Zeile `[YYYY-MM-TT HH:MM] Autor: Text` – der **Text ist vorhanden**,
+        auch bei Nachrichten des Zweitaccounts.
+  - [ ] Die Anhang-Nachricht hat eine zusätzliche Zeile `    Anhang: https://...`.
+  - [ ] Erwähnungen stehen als lesbarer Name, nicht als `<@123…>`
+        (`getContentDisplay()`).
 
 ---
 
@@ -415,7 +430,13 @@ Audit-Trail steht in `#bot-log`.
 
 | # | Phase | Befund | Auswirkung |
 |---|---|---|---|
-| 1 | 5 | Bot läuft ohne Intent `MESSAGE_CONTENT` (`JDABuilder.createDefault`). Ticket-Transcripts enthalten Zeitstempel, Autoren und Anhang-Links, aber **keine Nachrichtentexte** anderer Mitglieder. | Das Transcript archiviert das Gespräch nicht vollständig. Behebung: Intent im Discord Developer Portal aktivieren **und** in `Lumen.java` anfordern. |
+| – | – | keine | – |
+
+### Behoben
+
+| # | Phase | Befund | Behebung |
+|---|---|---|---|
+| 1 | 5 | Bot lief ohne Intent `MESSAGE_CONTENT`, Ticket-Transcripts enthielten keine Nachrichtentexte anderer Mitglieder. | Intent im Developer Portal aktiviert und in `Lumen.java` über `enableIntents(...)` angefordert. Verifiziert mit §7.7. |
 
 ### Neu gefunden
 

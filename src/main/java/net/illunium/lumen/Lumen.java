@@ -3,6 +3,7 @@ package net.illunium.lumen;
 import java.time.Duration;
 import net.dv8tion.jda.api.JDA;
 import net.dv8tion.jda.api.JDABuilder;
+import net.dv8tion.jda.api.requests.GatewayIntent;
 import net.illunium.lumen.core.CommandRouter;
 import net.illunium.lumen.core.Config;
 import net.illunium.lumen.core.HealthState;
@@ -46,7 +47,14 @@ public final class Lumen {
         // The router stays attached from build() on, because a missed ReadyEvent would mean
         // no commands are published at all; the gap until register() is a few microseconds
         // against a gateway handshake.
-        JDA jda = JDABuilder.createDefault(token).addEventListeners(router).build();
+        // MESSAGE_CONTENT is privileged and not part of createDefault's intents. Without it
+        // Discord returns an empty body for every message Lumen did not send, which would
+        // leave ticket transcripts as a list of authors and timestamps with no conversation.
+        // enableIntents adds to the defaults; createDefault(token, intent) would replace them.
+        JDA jda = JDABuilder.createDefault(token)
+                .enableIntents(GatewayIntent.MESSAGE_CONTENT)
+                .addEventListeners(router)
+                .build();
         Notifications notifications = new Notifications(jda, config);
         router.register(new SelfRolesCommand(
                 new SelfRoleRepository(database), notifications, config));

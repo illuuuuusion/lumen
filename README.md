@@ -50,6 +50,12 @@ cp config.example.yml config.yml   # fill in guild, channel and role IDs
 ./gradlew build                # compile + tests
 ```
 
+Lumen requests the privileged `MESSAGE_CONTENT` intent, which ticket transcripts
+need in order to contain the conversation rather than just its authors. Enable it
+under *Bot → Privileged Gateway Intents* in the
+[Discord Developer Portal](https://discord.com/developers/applications); without
+it the bot refuses to start instead of silently archiving empty messages.
+
 Run the bot with the token exported:
 
 ```bash
@@ -200,6 +206,11 @@ Closing runs in this order: database, lock the channel, transcript as a `.txt`
 into `#bot-log`, delete the channel 30 seconds later. The deletion is only queued
 once the transcript is out, so a failing archive leaves the channel standing
 instead of losing the conversation.
+
+The transcript carries the message bodies, which is what the privileged
+`MESSAGE_CONTENT` intent is for. It is added with `enableIntents`, not
+`createDefault(token, intent)` — the latter *replaces* the default intent set
+rather than extending it, which would leave the bot with that one intent.
 
 A ticket channel deleted by hand leaves an `OPEN` row behind. The only place that
 hurts is the creator's next ticket, and that is where the row is closed — no

@@ -1026,6 +1026,14 @@ Ticket Tool für einfache Support-/Report-Fälle im MVP ersetzen.
 - **Abweichung:** `Add User`/`Remove User` sind Staff-Rechte, nicht Ersteller-
   Rechte. Bei einem Report würde der Gemeldete sonst vom Melder selbst in den
   Channel geholt werden können.
+- Das Transcript braucht den privilegierten Intent `MESSAGE_CONTENT`; ohne ihn
+  liefert Discord zu jeder fremden Nachricht einen leeren Body, das Transcript
+  wäre eine Liste aus Autoren und Zeitstempeln ohne Gespräch. Er wird mit
+  `enableIntents(...)` **ergänzt**, nicht mit `createDefault(token, intent)`
+  gesetzt: letzteres **ersetzt** die Default-Intents (gemessen: 14 → 1) und
+  würde den Bot im Übrigen lahmlegen. Ist der Intent im Developer Portal nicht
+  aktiviert, startet der Bot gar nicht erst, statt still leere Transcripts zu
+  archivieren.
 - Close-Reihenfolge: DB-Update → Channel sperren (`MESSAGE_SEND` für alle
   Mitglieder-Overwrites außer dem Bot verweigert) → Transcript als `.txt` nach
   `#bot-log` → Channel 30 Sekunden später löschen. Das Löschen wird erst
