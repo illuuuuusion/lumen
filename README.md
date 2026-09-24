@@ -37,8 +37,8 @@ web            static UI bundle, Discord OAuth login, config API
 
 Kingdoms stays the source of truth for gameplay state; Lumen only mirrors it.
 
-Only `core` and `storage` exist so far — the remaining packages are added in
-their phases.
+Only `core`, `storage` and `notifications` exist so far — the remaining packages
+are added in their phases.
 
 ## Local setup
 
@@ -95,6 +95,30 @@ startup rather than silently used.
 SQL belongs in a repository under `storage`, never in a command or event
 handler. `SelfRoleRepository` is the reference implementation; the repositories
 for the other tables follow its shape and arrive with the phase that needs them.
+
+## Notifications
+
+Everything Lumen writes to Discord goes through `Notifications`. A module picks a
+`NotificationType` by meaning and never handles a channel ID:
+
+| Type | Channel | Meaning |
+|---|---|---|
+| `INFO` | `channels.announcements` | neutral information for members |
+| `SUCCESS` | `channels.announcements` | something finished as intended |
+| `WARNING` | `channels.status` | degraded, not broken |
+| `CRITICAL` | `channels.status` | broken and member-visible |
+| `MATCH` | `channels.matches` | Kingdoms match traffic |
+| `STAFF` | `channels.bot-log` | staff-only: audit, moderation, escalation |
+
+```java
+notifications.send(NotificationType.CRITICAL, "Kingdoms offline", "Seit 20:14");
+```
+
+A missing, unknown or unwritable channel drops the message with an explicit log
+line and never throws — a broken announcements channel must not take down a
+moderation command. `send(type, channelId, ...)` targets an explicit channel for
+the cases where the config holds something more specific, such as a per-server
+`status-channel`.
 
 ## Commands
 

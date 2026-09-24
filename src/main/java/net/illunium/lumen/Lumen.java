@@ -8,6 +8,8 @@ import net.illunium.lumen.core.Config;
 import net.illunium.lumen.core.HealthState;
 import net.illunium.lumen.core.HelpCommand;
 import net.illunium.lumen.core.StatusCommand;
+import net.illunium.lumen.notifications.NotificationType;
+import net.illunium.lumen.notifications.Notifications;
 import net.illunium.lumen.storage.Database;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -31,15 +33,21 @@ public final class Lumen {
         router.register(new StatusCommand(health));
 
         JDA jda = JDABuilder.createDefault(token).addEventListeners(router).build();
-        Runtime.getRuntime()
-                .addShutdownHook(new Thread(() -> shutdown(jda, database), "lumen-shutdown"));
+        Notifications notifications = new Notifications(jda, config);
+        Runtime.getRuntime().addShutdownHook(
+                new Thread(() -> shutdown(jda, database, notifications), "lumen-shutdown"));
 
         jda.awaitReady();
         log.info("Lumen connected to Discord");
+        notifications.send(NotificationType.STAFF, "Lumen gestartet",
+                "Der Bot ist verbunden und bereit.");
     }
 
-    private static void shutdown(JDA jda, Database database) {
+    private static void shutdown(JDA jda, Database database, Notifications notifications) {
         log.info("Shutting down");
+        // Queued before shutdown() on purpose: it drains pending requests, shutdownNow() does not.
+        notifications.send(NotificationType.STAFF, "Lumen wird beendet",
+                "Der Bot fährt kontrolliert herunter.");
         jda.shutdown();
         try {
             if (!jda.awaitShutdown(Duration.ofSeconds(10))) {

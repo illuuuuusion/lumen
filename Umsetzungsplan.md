@@ -870,17 +870,39 @@ Einheitliche Discord-Ausgaben und Channel-Routing.
 
 ### Aufgaben
 
-- [ ] Notification Service definieren.
-- [ ] Channel Routing über Config.
-- [ ] gemeinsame Embed-/Message-Helfer.
-- [ ] Typen `INFO`, `SUCCESS`, `WARNING`, `CRITICAL`, `MATCH`, `STAFF`.
-- [ ] Fehler bei fehlendem Zielchannel loggen, ohne den Bot zu crashen.
+- [x] Notification Service definieren.
+- [x] Channel Routing über Config.
+- [x] gemeinsame Embed-/Message-Helfer.
+- [x] Typen `INFO`, `SUCCESS`, `WARNING`, `CRITICAL`, `MATCH`, `STAFF`.
+- [x] Fehler bei fehlendem Zielchannel loggen, ohne den Bot zu crashen.
 
 ### Akzeptanzkriterien
 
 - Fachmodule benötigen keine eigene Channel-ID-Logik.
 - Channel-Routing ist zentral konfigurierbar.
 - Fehlkonfigurationen erzeugen verständliche Logs.
+
+### Umsetzungsnotizen
+
+- `net.illunium.lumen.notifications` mit `NotificationType` und `Notifications`.
+- Jeder Typ trägt seinen Ziel-Channel als Config-Pfad. Ein Modul wählt den Typ nach Bedeutung und fasst nie eine Channel-ID an:
+
+  | Typ | Channel | Bedeutung |
+  |---|---|---|
+  | `INFO` | `channels.announcements` | neutrale Information für Mitglieder |
+  | `SUCCESS` | `channels.announcements` | etwas ist wie beabsichtigt fertig geworden |
+  | `WARNING` | `channels.status` | eingeschränkt, aber nicht kaputt |
+  | `CRITICAL` | `channels.status` | kaputt und für Mitglieder sichtbar |
+  | `MATCH` | `channels.matches` | Kingdoms-Matchbetrieb |
+  | `STAFF` | `channels.bot-log` | Staff-only: Audit, Moderation, Eskalation |
+
+- Kein zusätzlicher Routing-Block in der Config. Die Channel-IDs stehen schon unter `channels.*`; eine zweite Indirektion Typ → Channel-Key wäre eine weitere Konfigurationsfläche ohne heutigen Nutzen. Falls ein Typ je einen eigenen Channel braucht, kommt der Override an dieser Stelle.
+- `send(type, channelId, ...)` erlaubt einen expliziten Channel. Damit kommt Phase 7 ohne eigene Sendelogik an den per-Server-`status-channel`.
+- Fehlender, unbekannter oder nicht beschreibbarer Channel verwirft die Nachricht mit einer klaren Logzeile und wirft nie. Ein kaputter Announcements-Channel darf weder einen Moderationsbefehl noch den Status-Poller mitreißen. `0` gilt als „nicht gesetzt", weil das der Platzhalter in `config.example.yml` ist.
+- `Notifications.embed(...)` ist öffentlich, damit ein Modul, das die gesendete Nachricht zurückbraucht (Phase 7 bearbeitet seine Statusnachricht weiter), dasselbe Aussehen nutzt statt es nachzubauen.
+- Beschreibungen werden auf Discords Limit gekürzt. Sie tragen Benutzereingaben wie Warn-Gründe; eine zu lange Eingabe würde sonst den kompletten Versand fehlschlagen lassen.
+- `Config.findId(...)` neu: optionale IDs ohne Exception. Phase 7 braucht das für `status-channel` ebenfalls.
+- Start- und Shutdown-Meldung gehen nach `STAFF`. Streng genommen Phase 14, aber drei Zeilen, in MVP-Abschnitt 17 gefordert und der einzige Weg, die Schicht im echten Betrieb zu sehen, bevor Phase 4 sie nutzt.
 
 ---
 

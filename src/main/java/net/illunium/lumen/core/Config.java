@@ -5,6 +5,7 @@ import java.io.Reader;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Map;
+import java.util.OptionalLong;
 import org.yaml.snakeyaml.Yaml;
 
 /**
@@ -38,7 +39,8 @@ public final class Config {
         }
     }
 
-    static Config parse(Reader reader, String source) {
+    /** Parses config from any reader. {@code source} only names the origin in error messages. */
+    public static Config parse(Reader reader, String source) {
         Map<String, Object> root = new Yaml().load(reader);
         if (root == null) {
             throw new IllegalStateException("Config file is empty: " + source);
@@ -48,18 +50,39 @@ public final class Config {
 
     /** Discord ID at the given dotted path, e.g. {@code channels.announcements}. */
     public long id(String path) {
-        Object node = root;
-        for (String key : path.split("\\.")) {
-            if (!(node instanceof Map<?, ?> map) || !map.containsKey(key)) {
-                throw new IllegalStateException("Missing config key '" + path + "' in " + source);
-            }
-            node = map.get(key);
+        Object node = node(path);
+        if (node == null) {
+            throw new IllegalStateException("Missing config key '" + path + "' in " + source);
         }
         if (node instanceof Number number) {
             return number.longValue();
         }
         throw new IllegalStateException("Config key '" + path + "' is not an ID in " + source
                 + " (got: " + node + ")");
+    }
+
+    /**
+     * Discord ID at the given dotted path, empty if the key is absent or not a number.
+     *
+     * <p>For optional IDs, where a missing value is a valid state rather than a broken
+     * config, so the caller can react instead of catching.
+     */
+    public OptionalLong findId(String path) {
+        return node(path) instanceof Number number
+                ? OptionalLong.of(number.longValue())
+                : OptionalLong.empty();
+    }
+
+    /** Raw value at the dotted path, or {@code null} if any segment is missing. */
+    private Object node(String path) {
+        Object node = root;
+        for (String key : path.split("\\.")) {
+            if (!(node instanceof Map<?, ?> map) || !map.containsKey(key)) {
+                return null;
+            }
+            node = map.get(key);
+        }
+        return node;
     }
 
     public long guildId() {
